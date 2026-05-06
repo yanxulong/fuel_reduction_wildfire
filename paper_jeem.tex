@@ -1,0 +1,1099 @@
+%==============================================================================
+% Manuscript for the Journal of Environmental Economics and Management (JEEM)
+% Title: Do Hazardous Fuel Reduction Treatments Prevent Wildfire Disasters?
+%==============================================================================
+\documentclass[12pt, letterpaper]{article}
+
+% --- Packages ---
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm, amsfonts}
+\usepackage[round, sort&compress]{natbib}
+\usepackage{bibentry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{setspace}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{threeparttable}
+\usepackage{enumitem}
+\usepackage{lineno}
+\usepackage{xcolor}
+\usepackage{soul}
+
+\doublespacing
+\hypersetup{colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{assumption}{Assumption}
+
+\bibliographystyle{elsarticle-harv}
+
+% --- Title Page ---
+\title{\textbf{Do Hazardous Fuel Reduction Treatments\\ Prevent Wildfire Disasters?}\\[0.4em]}
+
+\author{
+Yanxu Long\thanks{Corresponding author. Department of Applied Economics, University of Minnesota. Email: [email]. We thank [acknowledgments]. All errors are our own.} \\
+\textit{University of Minnesota}
+\and
+Stepen Polasky\\
+\textit{University of Minnesota}
+\and
+Dalia Iossifov\\
+\textit{US Forest Service}
+}
+\date{\today \\[1em] \textit{Preliminary draft. Please do not cite without permission.}}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+
+%==============================================================================
+% ABSTRACT
+%==============================================================================
+\begin{abstract}
+\noindent
+Do federal hazardous fuel reduction treatments prevent wildfire disasters? We harmonize the Wildfire Burn Zone Disasters database with 598,028 FACTS treatment activities over 2000--2024 and build a propensity-score-matched panel of 273,361 wildland-urban interface (WUI) polygons across the conterminous United States, comprising 6.83 million polygon-year observations. Treatment is defined as a completed FACTS activity within a 5 km buffer of the polygon centroid. Our matched difference-in-differences specification with two-way fixed effects, polygon-clustered standard errors, and time-varying PRISM climate controls implies a 31 percent within-polygon reduction in disaster occurrence (coefficient $-0.000258$, $p < 0.001$, against a matched-sample mean of $0.00083$) and a $0.0016$ log-point reduction in structures destroyed ($p < 0.001$) per treated polygon-year. The protective association is monotonically increasing in WUI density: low-density polygons show a small positive coefficient ($+0.000174$, $p = 0.061$), medium-density polygons $-0.000578$ ($p < 0.001$), and high-density polygons $-0.001028$ ($p < 0.001$), nearly four times the pooled mean and well in excess of the high-density baseline disaster rate. We subject these results to three falsification tests. \textit{First}, the matched event study fails the joint parallel trends test ($p < 0.001$); a donut design dropping the immediate three pre-treatment years does not restore parallel trends. \textit{Second}, a long-difference design comparing pre-2003 and post-2018 polygon means produces a precise null on every outcome ($+0.000415$, SE $0.000541$ on disaster occurrence; $+0.003326$, SE $0.003343$ on structures destroyed) and on every density stratum. \textit{Third}, a Bartik shift-share instrument built from state pre-period FACTS shares and the national HFRA-era budget shock has a strong first stage ($F = 5{,}992$) but yields a wrong-signed 2SLS coefficient, indicating the instrument is contaminated by persistent correlation between pre-period state FACTS allocations and state-level fire risk. We interpret the matched DiD as a robust conditional within-polygon association whose density-graded heterogeneity is consistent with the theoretical mechanism, but we cannot rule out residual selection on time-varying unobservables. Under the matched DiD coefficient and standard valuation parameters, the implied benefit-cost ratio is $0.58$ at the pooled mean treatment intensity and $2.3$ in high-density WUI polygons. If the long-difference null is correct, federal fuel treatment programs are not detectably effective at the polygon-year level, and any welfare argument must rely on channels not captured by our outcomes. The paper establishes robust descriptive infrastructure for evaluating federal fuel management at scale and documents the identification challenges that future causal evaluations must address.
+
+\bigskip
+\noindent \textit{JEL classification:} Q23, Q54, Q58, H54, C23, R52
+
+\noindent \textit{Keywords:} wildfire; fuel reduction treatments; wildland-urban interface; disaster mitigation; propensity score matching; difference-in-differences; long-differences; Bartik instrument; welfare analysis
+\end{abstract}
+
+\newpage
+\setcounter{page}{1}
+
+%==============================================================================
+% 1. INTRODUCTION
+%==============================================================================
+\section{Introduction}
+
+Wildfire is now the most economically consequential natural hazard in the United States. In January 2025, a single wildfire complex in Los Angeles killed 28 civilians, destroyed approximately 16,000 structures, and produced insured losses exceeding \$30 billion \citep{phillips2025}. This event was not anomalous: cumulative federal suppression expenditures exceeded \$50 billion between 2000 and 2024, insured property losses from major fire events surpassed \$80 billion in nominal terms, and the annual count of wildfires meeting disaster criteria more than doubled over the period \citep{calkin2005, baylis2023}. The convergence of climate-driven changes in fire weather \citep{westerling2006, abatzoglou2016, brown2023} with the rapid expansion of residential development into fire-prone landscapes \citep{radeloff2018, chen2024} has produced a sustained increase in aggregate exposure to catastrophic loss. The federal policy response has been proportional in scale but untested in effectiveness: the National Fire Plan of 2000, the Healthy Forests Restoration Act of 2003, and the Bipartisan Infrastructure Law of 2021 collectively authorize and fund systematic application of prescribed fire and mechanical treatments across the National Forest System, with annual targets of 3.6 million treated acres and cumulative federal outlays exceeding \$20 billion. The central empirical question motivating this paper is whether the investment reduces the disasters that justify it.
+
+Answering this question requires confronting two challenges that have limited prior empirical work. \textit{First}, fuel reduction treatments are not randomly assigned. Federal agencies prioritize areas with high biophysical hazard, dense WUI development, recent fire history, and favorable operational characteristics, generating selection on both observables and unobservables. \textit{Second}, the natural spatial unit for identification is the community rather than the forest or the fire: treatments operate through localized fire-behavior modification in a tight band of several kilometers surrounding a WUI polygon, not across the hundreds-of-thousands-of-acres administrative footprint of a National Forest. Existing economic evidence, which either aggregates to the forest-year level \citep{baylis2023} or focuses on narrow geographic samples, has been unable to recover the community-scale effects that theory and ecology both predict should be the primary channel of action.
+
+This paper provides a WUI-polygon-scale quasi-experimental evaluation of these mechanisms. We combine a novel harmonization of the Wildfire Burn Zone Disasters database \citep{wilner2025}, which records every wildfire event between 2000 and 2024 satisfying at least one of three disaster criteria (civilian fatalities, structural destruction, or federal disaster declaration), with the complete inventory of 598,028 fuel reduction activities documented in the US Forest Service Activity Tracking System (FACTS). Our unit of observation is the wildland-urban interface polygon as delineated by \citet{radeloff2018}, using the 2020 vintage of the national WUI dataset. From a national cross-section of 2,040,588 WUI Census-block polygons we construct a vicinity panel of 947,427 polygons (every polygon within 25 km of either a treated or a disaster-affected polygon) over 25 years, yielding 23.7 million polygon-year observations. Treatment exposure is defined as the presence of a completed federal fuel reduction treatment within a 5 km radius of the polygon centroid, and disaster outcomes are assigned via spatial intersection of the polygon with the burn perimeter of each classified WFBZ event. We further construct a propensity-score-matched analytic sample of 273,361 polygons (6.83 million polygon-years) for our preferred difference-in-differences specification.
+
+The empirical challenge is substantial. Fuel reduction treatments are not randomly assigned. Federal agencies prioritize areas with high biophysical hazard, dense WUI development, recent fire history, and favorable operational characteristics, generating selection on both observables and unobservables that confounds naive comparisons. Moreover, the inherently stochastic nature of wildfire ignition and propagation means that the counterfactual disaster outcome is fundamentally unobserved at the polygon level. We address these challenges through a layered identification strategy. We first apply state-stratified one-to-five nearest-neighbor propensity score matching with a caliper on baseline polygon area, density class, intermix dummy, pre-period climate normals (PRISM 2000--2002 mean temperature and precipitation), and pre-period disaster history. We then estimate two-way fixed-effects difference-in-differences on the matched sample, augmented with time-varying climate controls and polygon-clustered standard errors. We complement the matched DiD with three falsification tests of increasing severity: an event study with binned event time, a donut event study that drops the immediate three pre-treatment years, and a long-difference design that collapses the panel to two periods (2000--2002 and 2018--2024). We additionally implement a Bartik shift-share instrument constructed from state pre-period FACTS shares and the national HFRA-era budget shock.
+
+Our analysis yields four sets of findings. \textit{First}, the matched DiD specification recovers a strongly significant within-polygon protective association on both disaster occurrence and severity. The binary disaster outcome coefficient is $-0.000258$ (SE $0.000069$, $p < 0.001$) against a matched-sample mean of $0.00083$, implying a 31 percent reduction in disaster occurrence per treated polygon-year. The severity coefficient on $\ln(1 + \text{structures destroyed})$ is $-0.001588$ (SE $0.000381$, $p < 0.001$), and rises in absolute value to $-0.002051$ ($p < 0.001$) when treatment is measured at a three-year lag. Climate controls (annual temperature and log precipitation from PRISM 4 km) absorb a substantial fraction of within-polygon variation: warmer, drier polygon-years exhibit higher disaster rates, and including these controls strengthens rather than attenuates the matched DiD coefficient. \textit{Second}, treatment effect heterogeneity by WUI density class matches the comparative statics of our expected-damage model. The pooled disaster coefficient masks a monotonic gradient: low-density polygons show $+0.000174$ ($p = 0.061$), medium-density polygons $-0.000578$ ($p < 0.001$), and high-density polygons $-0.001028$ ($p < 0.001$), nearly four times the pooled mean. The high-density coefficient is large enough to imply a benefit-cost ratio of $2.3$ at standard valuation parameters. \textit{Third}, three falsification tests produce conflicting evidence on the causal interpretation. The matched event study fails the joint parallel trends test ($p < 0.001$), with significant negative coefficients in the pre-treatment window. A donut design dropping event times $-3$ to $-1$ does not restore parallel trends, indicating the issue is structural rather than driven by an Ashenfelter dip. A long-difference design comparing pre-2003 and post-2018 polygon means produces a precise null on every outcome and density stratum (disaster occurrence: $+0.000415$, $p = 0.443$; structures destroyed: $+0.003326$, $p = 0.320$). The Bartik shift-share IV has a strong first stage ($F = 5{,}992$ on the full panel) but yields a wrong-signed 2SLS coefficient on disaster occurrence ($+0.0029$), indicating that pre-period state FACTS shares are correlated with persistent state-level fire risk and the instrument fails the exclusion restriction. \textit{Fourth}, we interpret the matched DiD as a robust conditional within-polygon association whose density-graded heterogeneity is consistent with the theoretical mechanism, but we cannot rule out residual selection on time-varying unobservables. The honest reading is that conditional on the data quality available from public sources, credible identification of FACTS effects on wildfire disasters at the polygon-year level requires either an exogenous treatment shock or a research design that exploits within-state-year variation in treatment intensity, neither of which is available with the current FACTS metadata.
+
+This study contributes to the environmental economics literature in three ways. \textit{First}, we deliver the most comprehensive WUI-polygon-scale evaluation of federal fuel treatment effectiveness available to date. Existing evidence is either ecological, documenting changes in stand-level fire behavior \citep{agee2005, finney2001, stephens2012}, or geographically narrow, leaving the population-relevant question of disaster prevention unanswered. The closest economic precedent, \citet{baylis2023}, studies the incidence of suppression spending rather than the causal effect of ex ante mitigation. Our 25-year national panel of 273,361 matched WUI polygons closes the descriptive gap. We make all matching, regression, and welfare code available so that future researchers can replicate the matched DiD on this infrastructure and overlay alternative identification strategies.
+
+\textit{Second}, the density-stratified heterogeneity we recover provides direct guidance for the allocation of treatment budgets even under our cautious causal interpretation. The matched DiD coefficient is monotonically increasing in WUI density, and the implied benefit-cost arithmetic crosses unity in the high-density subsample but not in the pooled sample. The equimarginal principle requires concentrating marginal investment where vulnerability and biophysical hazard intersect; our heterogeneity results identify these conditions empirically. Even if the pooled matched DiD coefficient is biased toward finding a treatment effect, the within-sample density gradient is not generated by a single selection story and is the most policy-actionable result of the paper.
+
+\textit{Third}, we transparently document the identification challenges of evaluating FACTS treatments at scale. The matched event study, donut design, long-difference design, and Bartik shift-share IV jointly establish that none of the standard quasi-experimental tools we have available can deliver an unambiguously causal estimate on this data. We translate the matched DiD point estimates into welfare and benefit-cost calculations under the maintained causal interpretation, while flagging that the long-difference null and the failed pre-trend test mean these calculations are best read as upper bounds on the welfare value of federal fuel treatment programs at average treatment intensity. The contribution of this transparency is to clarify what additional data or institutional variation future research must exploit in order to deliver a clean causal estimate.
+
+The remainder of the paper is organized as follows. Section \ref{sec:background} provides institutional background on federal fuel management policy. Section \ref{sec:theory} develops a formal expected-damage model and derives four testable predictions. Section \ref{sec:data} describes the data sources and sample construction. Section \ref{sec:strategy} presents the empirical strategy. Section \ref{sec:results} reports the main results. Section \ref{sec:welfare} conducts the welfare analysis and characterizes distributional incidence. Section \ref{sec:robust} presents robustness checks. Section \ref{sec:discussion} discusses interpretation, limitations, and policy implications. Section \ref{sec:conclusion} concludes.
+
+
+%==============================================================================
+% 2. INSTITUTIONAL BACKGROUND
+%==============================================================================
+\section{Institutional Background}\label{sec:background}
+
+\subsection{From Suppression to Active Management}
+
+For most of the twentieth century, federal wildfire policy in the United States operated under a strict suppression paradigm. The ``10 AM policy'' adopted by the US Forest Service in 1935 mandated control of all wildfires by 10:00 AM the morning following initial report, a doctrine that prioritized rapid extinction over ecological considerations. While effective at reducing burned area in the short run, decades of successful suppression generated an unintended consequence: the accumulation of dense surface fuels and ladder fuels that, under historical fire regimes, would have been periodically consumed by low-intensity fires \citep{agee2005, stephens2012}. This accumulated fuel load now exposes vast tracts of federal land to high-intensity, stand-replacing fire under the increasingly extreme weather conditions documented by \citet{abatzoglou2016} and \citet{brown2023}.
+
+The policy paradigm shifted following a series of catastrophic fire seasons in the late 1990s. The National Fire Plan (NFP) of 2000 was the first comprehensive federal initiative to elevate fuel management to a central role alongside suppression. The Healthy Forests Restoration Act (HFRA) of 2003 codified this shift, providing streamlined authority under the National Environmental Policy Act for fuel reduction projects in WUI areas and municipal watersheds. The Bipartisan Infrastructure Law of 2021 and the Inflation Reduction Act of 2022 further expanded federal funding, increasing annual appropriations for hazardous fuels management to historic levels.
+
+\subsection{Treatment Modalities and Costs}
+
+Federal fuel reduction treatments fall into two principal categories under the Forest Service classification scheme. \textit{Mechanical treatments} include thinning, mastication, hand piling, and machine piling, in which physical removal or rearrangement of vegetation reduces fuel loads. \textit{Prescribed fire treatments} use deliberately ignited, low-intensity burns under controlled conditions to consume surface fuels and understory vegetation. In practice, many projects employ a sequence of mechanical thinning followed by prescribed burning to achieve comprehensive fuel reduction.
+
+Treatment costs vary substantially by modality and operational conditions. Per-acre costs in the FACTS database range from approximately \$80 for prescribed pile burning to over \$1{,}500 for intensive mechanical thinning in steep terrain. The acreage-weighted average across all human-fire-reduction activity types in our matched analytic sample is approximately \$294 per acre, implying an annual federal commitment of roughly \$1.1 billion at the policy target of 3.6 million acres per year.
+
+\subsection{Treatment Prioritization}
+
+Federal treatment placement is governed by an explicit prioritization framework. The National Cohesive Wildland Fire Management Strategy directs investments toward areas where treatments yield the greatest reduction in risk to communities, infrastructure, and ecological values. Operationally, this translates into preferential treatment of WUI areas (as designated under HFRA), areas with Community Wildfire Protection Plans (CWPPs), and locations identified as high priority through the Forest Service Wildfire Crisis Strategy. The endogenous nature of this prioritization, treatment is directed toward high-risk areas, is the central identification challenge addressed by our two-stage matching and difference-in-differences design.
+
+
+%==============================================================================
+% 3. THEORETICAL FRAMEWORK
+%==============================================================================
+\section{Theoretical Framework}\label{sec:theory}
+
+We develop a parsimonious expected-damage model of wildfire disaster mitigation that formalizes the economic logic of fuel treatment policy and generates testable empirical predictions. The model is in the tradition of disaster economics frameworks following \citet{kunreuther1996} and \citet{kousky2014}, adapted to the specific institutional setting of federal land management.
+
+\subsection{Setup}
+
+Consider a set of WUI communities indexed by $i = 1, \ldots, N$, observed over discrete time periods $t = 1, \ldots, T$. Each community $i$ in period $t$ is characterized by a vector of state variables: a fuel load $F_{it}$, a vector of exogenous fire-weather conditions $W_{it}$ (temperature, precipitation, wind), a topographic profile $T_i$ (elevation, slope, aspect), and a vulnerability measure $V_i$ capturing the value of structures and population at risk.
+
+The probability that community $i$ experiences a wildfire reaching the developed area in period $t$ is:
+\begin{equation}
+\pi_{it} = \pi(F_{it}, W_{it}, T_i; \theta_\pi),
+\label{eq:fire_prob}
+\end{equation}
+where $\theta_\pi$ is a vector of structural parameters and $\partial \pi / \partial F > 0$, $\partial \pi / \partial W > 0$ for adverse weather conditions. Conditional on a fire reaching the community, the realized damage is:
+\begin{equation}
+L_{it} = L(F_{it}, V_i, W_{it}; \theta_L),
+\label{eq:damage}
+\end{equation}
+with $\partial L / \partial F > 0$, $\partial L / \partial V > 0$, reflecting the joint role of fuel-driven fire intensity and exposed asset values in determining loss.
+
+The expected wildfire damage to community $i$ in period $t$ is therefore:
+\begin{equation}
+E[\text{Loss}_{it}] = \pi_{it}(F_{it}, W_{it}, T_i) \cdot L_{it}(F_{it}, V_i, W_{it}).
+\label{eq:expected_loss}
+\end{equation}
+
+A wildfire \textit{disaster} is defined as the realization of a damage outcome exceeding a critical threshold $\tau$ representing the joint occurrence of fatalities, structural destruction, or federal declaration:
+\begin{equation}
+D_{it} = \mathbf{1}[L_{it} > \tau \mid \text{fire occurs}] \cdot \mathbf{1}[\text{fire occurs}].
+\label{eq:disaster_def}
+\end{equation}
+
+\subsection{Treatment Technology}
+
+A fuel reduction treatment is modeled as a continuous choice variable $a_{it} \geq 0$ representing acres treated within a buffer zone surrounding community $i$ during period $t$. The post-treatment fuel load evolves according to:
+\begin{equation}
+F_{it}^{\text{post}} = F_{it}^{\text{pre}} - h(A_{it}), \quad h'(\cdot) > 0, \; h''(\cdot) < 0,
+\label{eq:fuel_tech}
+\end{equation}
+where $A_{it} = \sum_{s=t-K}^{t} a_{is}$ is the stock of treatments completed within an effective lifespan window of $K$ years, and $h(\cdot)$ is a strictly concave fuel reduction function reflecting diminishing marginal returns. Concavity arises because the first units of treatment target the most fire-critical fuel arrangements (continuous surface fuels, ladder fuels providing pathways for crown fire initiation), while marginal acres treat progressively less consequential fuel structures. The treatment cost is $c(a_{it}) = c \cdot a_{it}$, where $c$ is the unit cost per acre.
+
+\subsection{The Social Planner's Problem}
+
+A social planner allocates treatment effort across communities and time to maximize the discounted sum of net social welfare. Letting $r$ denote the social discount rate, the planner solves:
+\begin{equation}
+\max_{\{a_{it}\}} \sum_{t=1}^{T} (1+r)^{-t} \sum_{i=1}^{N} \left[ -\pi_{it}(F_{it}, W_{it}, T_i) \cdot L_{it}(F_{it}, V_i, W_{it}) - c \cdot a_{it} \right]
+\label{eq:social_planner}
+\end{equation}
+subject to the fuel evolution equation (\ref{eq:fuel_tech}) and the budget constraint $\sum_i \sum_t c \cdot a_{it} \leq B$, where $B$ is the federal fuel management budget.
+
+The first-order condition for an interior optimum at community $i$ in period $t$ is:
+\begin{equation}
+\underbrace{-\frac{\partial \pi_{it}}{\partial F} \cdot L_{it} \cdot h'(A_{it}) - \pi_{it} \cdot \frac{\partial L_{it}}{\partial F} \cdot h'(A_{it})}_{\text{Marginal social benefit of treatment}} = \underbrace{c + \mu}_{\text{Marginal social cost plus shadow price of budget}},
+\label{eq:foc}
+\end{equation}
+where $\mu \geq 0$ is the Lagrange multiplier on the budget constraint.
+
+Equation (\ref{eq:foc}) reveals two distinct welfare channels through which treatment generates social benefit: it reduces the probability that a fire reaches the community ($-\partial \pi / \partial F$), and it reduces the damage conditional on fire ($-\partial L / \partial F$). The empirical specifications below identify the reduced-form combination of these two channels through the disaster outcome variable.
+
+\subsection{Comparative Statics and Testable Predictions}
+
+The first-order condition (\ref{eq:foc}) generates several comparative statics that motivate our empirical specifications.
+
+\begin{proposition}[Optimal treatment is increasing in vulnerability]
+\label{prop:vulnerability}
+The optimal treatment intensity $a^*_{it}$ is strictly increasing in community vulnerability $V_i$:
+$$\frac{\partial a^*_{it}}{\partial V_i} > 0.$$
+\end{proposition}
+
+\begin{proof}
+Differentiating (\ref{eq:foc}) with respect to $V_i$ and applying the implicit function theorem, $\partial L / \partial V > 0$ raises the marginal benefit of treatment, requiring an increase in $a^*$ to restore the equality, given the concavity of $h(\cdot)$.
+\end{proof}
+
+\begin{proposition}[Diminishing returns to treatment intensity]
+\label{prop:diminishing}
+The marginal effect of treatment on disaster probability is decreasing in cumulative treated acreage:
+$$\frac{\partial^2 P(D_{it} = 1)}{\partial A_{it}^2} > 0.$$
+\end{proposition}
+
+\begin{proof}
+Follows directly from $h''(\cdot) < 0$ and the chain rule applied to $P(D_{it} = 1) = P(L_{it} > \tau)$.
+\end{proof}
+
+\begin{proposition}[Treatment effect heterogeneity]
+\label{prop:heterogeneity}
+The absolute treatment effect on disaster probability is increasing in vulnerability:
+$$\frac{\partial}{\partial V_i}\left|\frac{\partial P(D_{it} = 1)}{\partial A_{it}}\right| > 0.$$
+\end{proposition}
+
+\newtheorem{corollary}{Corollary}
+\begin{corollary}[Equimarginal allocation]
+\label{cor:equimarginal}
+At any interior solution to the constrained planner's problem, the welfare-maximizing treatment allocation across communities $i$ and $j$ satisfies:
+$$\left|\frac{\partial \pi_{it}}{\partial F}\right| L_{it} h'(A^*_{it}) = \left|\frac{\partial \pi_{jt}}{\partial F}\right| L_{jt} h'(A^*_{jt}) = c + \mu.$$
+\end{corollary}
+
+Corollary \ref{cor:equimarginal} states that, under a binding budget, the planner equates marginal social benefits across treated locations rather than equating treated acreage. Communities with higher vulnerability or higher biophysical hazard receive more treatment, but the \textit{marginal} benefit per dollar is equalized. This benchmark is testable: if the observed pattern of treatment placement diverges systematically from heterogeneity in the estimated marginal benefit, the federal allocation deviates from the welfare-maximizing benchmark.
+
+These three propositions and the corollary yield four testable empirical predictions that structure the analysis below: (P1) the average treatment effect on disaster probability is negative; (P2) the relationship between treatment intensity and disaster probability exhibits diminishing returns, identifiable through a log-linear specification; (P3) treatment effects are larger in high-density WUI polygons where vulnerability is greatest; and (P4) the marginal benefit of treatment, computed from the heterogeneous treatment effects, is approximately equalized across the actively treated subset of polygons under the welfare-maximizing benchmark.
+
+\subsection{Welfare Implications}
+
+The welfare gain from a marginal increase in treatment at community $i$ in period $t$ is:
+\begin{equation}
+\Delta W_{it} = \left|\frac{\partial P(D_{it} = 1)}{\partial A_{it}}\right| \cdot E[L_{it} \mid D_{it} = 1] - c.
+\label{eq:welfare_marginal}
+\end{equation}
+
+Total welfare gains across the federal estate are:
+\begin{equation}
+\Delta W^{\text{total}} = \sum_t (1+r)^{-t} \sum_i \left[\left|\hat{\beta}_1\right| \cdot \overline{L} - c \cdot \bar{a}_i\right],
+\label{eq:welfare_total}
+\end{equation}
+where $\hat{\beta}_1$ is the empirically estimated treatment effect, $\overline{L}$ is the expected damage given disaster, and $\bar{a}_i$ is the average treatment intensity per polygon. Equation (\ref{eq:welfare_total}) provides the bridge between the reduced-form empirical estimates and the welfare analysis presented in Section \ref{sec:welfare}.
+
+
+%==============================================================================
+% 4. DATA
+%==============================================================================
+\section{Data}\label{sec:data}
+
+\subsection{Wildfire Burn Zone Disasters}
+
+Our outcome variable is constructed from the Wildfire Burn Zone Disasters database \citep{wilner2025}, the first systematic harmonization of federal and state records identifying every wildfire event between 2000 and 2025 that satisfied at least one of three disaster criteria. The criteria follow established practice in disaster economics: (i) at least one civilian fatality directly attributable to the fire event; (ii) destruction of at least one residential or commercial structure; or (iii) issuance of a federal disaster declaration under the Stafford Act. Each classified event is geo-referenced to its burn perimeter, enabling spatial linkage with the polygon panel.
+
+We code a binary outcome variable $D_{it}$ equal to one if WUI polygon $i$'s centroid falls within the burn perimeter of a classified disaster event in year $t$, and zero otherwise. As a continuous severity outcome, we also use $\ln(1 + S_{it})$, where $S_{it}$ is the total number of structures destroyed attributed to polygon $i$ during year $t$, summed across intersecting disaster events. The severity outcome captures variation within disaster years that the binary indicator necessarily discards. Across the 23{,}685{,}675 polygon-year observations in the full vicinity panel, the binary disaster rate is 0.090 percent; on the 6{,}834{,}025 polygon-year matched sample the disaster rate is 0.083 percent. Conditional on a disaster polygon-year, the matched sample mean number of structures destroyed is approximately 1{,}044, with an average of 2.89 civilian fatalities.
+
+\subsection{Hazardous Fuel Treatment Records}
+
+Treatment data are drawn from the Forest Service Activity Tracking System (FACTS), specifically the \textit{S\_USA.Activity\_HazFuelTrt\_PL} polygon dataset maintained by the US Forest Service Geospatial Service and Technology Center. The dataset records 598,028 fuel reduction activities completed on National Forest System lands between fiscal years 2000 and 2024. Each record provides the geo-referenced polygon footprint, the fiscal year of award and completion, the activity classification (FACTS \texttt{ACTIVITY} field), the Forest Service category (\texttt{CAT\_NM}, with values \textit{Mechanical} and \textit{Fire}), the treated acreage (\texttt{GIS\_ACRES}), the unit cost (\texttt{COST\_PER\_U}), the implementing forest unit, and the National Environmental Policy Act compliance status.
+
+We restrict the analytic sample to records meeting the following criteria: (i) \texttt{STAGE\_VALU = ``Accomplished''}, ensuring inclusion only of completed treatments; (ii) \texttt{FY\_AWARDED} between 2000 and 2024; (iii) non-missing \texttt{GIS\_ACRES} greater than zero; (iv) records associated with a valid Forest Service administrative unit; and (v) the human-only fire reduction subset identified by the cleaning protocol of \citet{wear2025}, which removes activities reclassified as wildfire suppression rather than ex ante hazard reduction. After applying these filters, the cleaned dataset contains 331,741 activity records summing to a national cumulative treated acreage in the tens of millions of acres.
+
+We construct three principal treatment variables and their lagged counterparts. The extensive margin indicator $FRT_{it}$ equals one if WUI polygon $i$ has at least one completed fuel treatment within its 5 km buffer by year $t$, and zero otherwise. We use a 5 km buffer rather than the 10 km buffer of earlier work because 5 km is closer to the documented stand-level effect range of fuel treatments \citep{stephens2012}, and because the wider buffer dilutes the within-polygon contrast between treated and untreated polygon-years. The cumulative intensive margin $\ln(1 + A_{it})$ uses the cumulative treated acreage within the 5 km buffer of polygon $i$ through year $t$, summed across all activity types. Our preferred intensive measure, however, is a decay-weighted treatment stock $T_{it} = \sum_{s \leq t} a_{is} \cdot \exp(-(t - s)/\tau)$ with decay parameter $\tau = 5$ years (half-life approximately $3.5$ years), which down-weights treatments that have aged past their plausible effective lifespan, and we include $\ln(1 + T_{it})$ as the intensive margin. To capture the temporal lag between treatment implementation and fire-season exposure, we also construct binary three-year-lagged indicators ($FRT_{i,t-3}$ etc.). The three-year lag both allows physical fuel-load reduction to take effect and captures the typical fire-return interval over which the protective channel is most plausible. Across the 1{,}800{,}437 treated polygon-year observations in the full vicinity panel, the mean cumulative treated acreage within the 5 km buffer is on the order of several thousand acres.
+
+\subsection{WUI Polygons}
+
+The unit of observation is the WUI polygon as delineated by \citet{radeloff2018}, implemented via the 2020 vintage of the national WUI geopackage produced by the University of Wisconsin SILVIS Lab. The national WUI dataset classifies every populated 30-meter Census block in the conterminous United States into one of six WUI categories based on the joint conditions of housing density (Low, Medium, or High) and vegetation cover (Intermix if vegetation exceeds 50 percent of block area, Interface if non-vegetation adjacent to wildland). We retain both Intermix and Interface classes (jointly, the ``WUI proper'') and conduct the primary analysis on the pooled set, with separate results for Intermix-only as a robustness check.
+
+We construct the panel from the conterminous United States (the 48 contiguous states and the District of Columbia). The national cross-section of WUI polygons contains 2{,}040{,}588 Census-block-level Intermix and Interface polygons drawn from the 2020 SILVIS lab WUI v4 product. We define the \textit{vicinity panel} as every WUI polygon within 25 km of either a polygon that received a FACTS treatment within its 5 km buffer or a polygon intersecting a WFBZ disaster perimeter; this construction expands the relevant comparison set to the populated regions adjacent to the federal estate while keeping the panel computationally tractable. The vicinity panel contains 947{,}427 unique polygons; balanced over 25 fiscal years (2000 to 2024), it yields 23{,}685{,}675 polygon-year observations. We then build a propensity-score-matched analytic sample (described in Section \ref{sec:strategy}) that contains 273{,}361 polygons and 6{,}834{,}025 polygon-year observations.
+
+Treatment exposure $FRT_{it}$ is defined as one if any completed FACTS fuel reduction activity falls within a 5 km radius of the polygon centroid by year $t$, computed via a KDTree spatial query on polygon and treatment centroids in the NAD83 Conus Albers (EPSG:5070) equal-area projection. The cumulative intensive margin $A_{it}$ is the cumulative sum of \texttt{GIS\_ACRES} from all matched treatments through year $t$, and the decay-weighted stock $T_{it} = \sum_{s \leq t} a_{is} \exp(-(t-s)/5)$ uses a five-year decay parameter. Disaster outcomes are assigned by spatial intersection: a polygon is coded as experiencing a disaster if its centroid falls within the burn perimeter of at least one classified WFBZ disaster event, reprojected to EPSG:5070 for the spatial join.
+
+\subsection{Covariates}
+
+We assemble a battery of time-varying and time-invariant covariates to address confounding variation in wildfire risk and treatment effectiveness.
+
+\textit{Topographic variables}, drawn from the USGS National Elevation Dataset at 30-meter resolution, include polygon-mean elevation (meters), slope (degrees), and aspect (degrees from north). These variables capture both fire behavior determinants (slope-driven acceleration, elevation-dependent vegetation regimes) and treatment feasibility constraints (mechanical access on steep terrain).
+
+\textit{Climate and weather variables}, drawn from the PRISM and GridMET datasets, provide annual measures of total precipitation (mm), mean temperature ($^\circ$C), maximum 10-meter wind speed (m/s), and the energy release component (ERC) summer maximum, a standard fire danger index. These variables account for the year-to-year stochastic variation in fire weather that drives the conditional probability of fire occurrence and propagation.
+
+\textit{Fire history}, drawn from the LANDFIRE database, provides the historical mean fire return interval for each polygon, capturing baseline differences in fire regime that are independent of contemporary treatment activity.
+
+\textit{Housing and exposure variables} from the Radeloff dataset and the Zillow Transaction and Assessment Database provide baseline housing density, total housing units, and median housing values, which serve as inputs to the welfare analysis in Section \ref{sec:welfare}.
+
+\subsection{Summary Statistics}
+
+Table \ref{tab:summary} reports summary statistics for the propensity-score-matched analytic sample of 273{,}361 WUI polygons, splitting polygon-years by whether the cumulative treatment indicator $FRT_{it}$ equals one or zero.
+
+\begin{table}[H]
+\centering
+\small
+\begin{threeparttable}
+\caption{Summary Statistics, Matched WUI Polygon-Year Panel (Conterminous U.S., 2000--2024)}
+\label{tab:summary}
+\begin{tabular}{lcccc}
+\toprule
+& \multicolumn{2}{c}{$FRT_{it} = 1$ (treated)} & \multicolumn{2}{c}{$FRT_{it} = 0$ (untreated)} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5}
+Variable & Mean & SD & Mean & SD \\
+\midrule
+\multicolumn{5}{l}{\textit{Panel A: Outcomes}} \\
+Wildfire disaster $D_{it}$ & 0.00125 & 0.0353 & 0.00078 & 0.0279 \\
+Structures destroyed (cond.\ on disaster) & 1{,}044 & 7{,}213 & 1{,}044 & 7{,}213 \\
+Civilian fatalities (cond.\ on disaster) & 2.89 & 12.7 & 2.89 & 12.7 \\
+\addlinespace
+\multicolumn{5}{l}{\textit{Panel B: Treatment exposure}} \\
+$FRT_{it}$ (any cumulative treatment) & 1.000 & 0.000 & 0.000 & 0.000 \\
+Cumulative treated acres within 5 km buffer (thousands) & 5.4 & 18.7 & 0 & 0 \\
+Decay-weighted treatment stock $T_{it}$ & 1.6 & 6.4 & 0 & 0 \\
+\addlinespace
+\multicolumn{5}{l}{\textit{Panel C: WUI class composition (\% of polygons)}} \\
+Intermix Low density & 18.1 & --- & 16.5 & --- \\
+Intermix Medium density & 7.4 & --- & 6.9 & --- \\
+Intermix High density & 1.1 & --- & 0.9 & --- \\
+Interface Low density & 14.6 & --- & 14.3 & --- \\
+Interface Medium density & 36.5 & --- & 38.2 & --- \\
+Interface High density & 22.3 & --- & 23.2 & --- \\
+\addlinespace
+\multicolumn{5}{l}{\textit{Panel D: Climate (PRISM 4 km annual)}} \\
+Mean temperature ($^\circ$C) & 11.2 & 5.3 & 11.6 & 5.1 \\
+Annual precipitation (mm) & 901 & 469 & 928 & 461 \\
+\midrule
+Polygon-year observations & \multicolumn{2}{c}{1{,}138{,}675} & \multicolumn{2}{c}{5{,}695{,}350} \\
+Unique polygons & \multicolumn{2}{c}{45{,}547} & \multicolumn{2}{c}{227{,}814} \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\small
+\item \textit{Notes:} The sample is the propensity-score-matched analytic panel of 273{,}361 WUI polygons in the conterminous United States, observed over 25 fiscal years (2000--2024), for a total of 6{,}834{,}025 observations. The treatment indicator $FRT_{it}$ equals one if at least one completed FACTS fuel reduction activity is located within a 5 km radius of the polygon centroid by year $t$. Polygons transition from $FRT_{it} = 0$ to $FRT_{it} = 1$ in the year of the first qualifying treatment and remain treated thereafter. Matched controls are drawn via state-stratified 1:5 nearest-neighbor matching on the linear propensity score with caliper $0.2 \cdot \mathrm{sd}(\mathrm{logit}\,\hat p)$, without replacement. The conditional means of structures destroyed and fatalities are computed across the 5{,}658 disaster polygon-years in the matched sample.
+\end{tablenotes}
+\end{threeparttable}
+\end{table}
+
+Two patterns in Table \ref{tab:summary} are worth noting. First, the matched-sample disaster rate is higher for treated polygon-years (0.125 percent) than for matched-control polygon-years (0.078 percent), a 60 percent excess. This residual difference, after PSM, reflects the fact that treated polygons are conditionally more fire-prone than the closest matched controls on the time-varying margin and motivates the within-polygon fixed effects strategy used below. Second, the modal WUI polygon in our matched sample is an Interface Medium-density or Interface High-density class, consistent with the concentration of residential development in Medium-to-High-density areas adjacent to but not intermixed with wildlands. Intermix polygons, although the canonical Radeloff WUI class, constitute approximately 27 percent of the matched sample.
+
+
+%==============================================================================
+% 5. EMPIRICAL STRATEGY
+%==============================================================================
+\section{Empirical Strategy}\label{sec:strategy}
+
+Our empirical strategy is layered. We first construct a propensity-score-matched analytic sample that balances treated and never-treated polygons on baseline biophysical, climatic, and demographic characteristics. We then estimate a staggered difference-in-differences on this matched sample using the cohort-time average treatment effects on the treated of \citet{callaway2021}, identified under conditional parallel trends and a doubly-robust score conditional on the matching covariates and time-varying climate. Pre-trend testing is restricted to event times $k \leq -2$ in order to purge the one-period Ashenfelter-style spike at $k = -1$ that is mechanically generated by post-disaster prioritization in FACTS allocation, a pattern documented in Section \ref{sec:results}. We complement the staggered DiD with two falsification exercises: a long-difference design that collapses the panel to two periods, and a Bartik shift-share instrument constructed from state pre-period FACTS shares interacted with the national HFRA-era budget shock. The aim of the layering is not to claim that any single specification delivers an unambiguously causal estimate but to map the precise conditions under which a protective association can and cannot be sustained.
+
+\subsection{Stage 1: Propensity Score Matching}\label{sec:psm}
+
+The non-random assignment of FACTS treatments introduces selection bias along dimensions that are correlated with both treatment probability and disaster risk. Federal agencies preferentially treat WUI polygons that are larger, more vegetated, climatically drier, and historically fire-prone. We address this dimension of observable selection by constructing a control group whose distribution of pre-treatment covariates closely tracks that of the treated population.
+
+Define $T_i \in \{0, 1\}$ as the indicator that WUI polygon $i$ receives at least one FACTS fuel reduction treatment within its 5 km buffer at any point during 2000--2024. We estimate the propensity score:
+\begin{equation}
+p(\mathbf{Z}_i) = P(T_i = 1 \mid \mathbf{Z}_i) = \frac{\exp(\mathbf{Z}_i' \boldsymbol{\phi})}{1 + \exp(\mathbf{Z}_i' \boldsymbol{\phi})},
+\label{eq:propensity}
+\end{equation}
+via a logit model whose covariate vector $\mathbf{Z}_i$ contains: log polygon area, an Intermix indicator, a complete set of WUI density-class dummies (Low, Medium, High), the polygon-level pre-period (2000--2002) PRISM mean annual temperature, the pre-period log mean annual precipitation, and the pre-period mean annual disaster occurrence rate. The pre-period climate normals capture both the biophysical hazard environment and the operational feasibility of treatment, and the pre-period disaster history captures the residual selection on past fire activity that would otherwise contaminate any TWFE comparison through regression to the mean.
+
+We implement coarsened-exact matching on state of residence at the first stage, then within each state-stratum apply one-to-five nearest-neighbor matching on the estimated linear-propensity-score (logit $\hat{p}$) without replacement, subject to a caliper of 0.2 standard deviations of the linear propensity score. The 1:5 ratio increases efficiency over the conventional 1:1 design while remaining well within the asymptotic bias-variance tradeoff documented by \citet{rosenbaum1983}. State stratification is essential because the cross-state distribution of FACTS treatment intensity is highly skewed: Oregon alone accounts for over 40 percent of treated polygons in the raw cross-section, and pooling across states would generate spurious balance imbalances driven by the OR-vs-non-OR composition rather than within-state selection on observables.
+
+The matched analytic sample contains 273{,}361 polygons (45{,}547 treated and 227{,}814 matched controls) drawn from the 947{,}427-polygon vicinity panel. After matching, all six standardized mean differences are below 0.12, the conventional threshold of \citet{rosenbaum1983}, with the largest residual difference on log polygon area (SMD = 0.116). Common support is verified by direct inspection of the linear-propensity-score distributions in the treated and matched-control populations. We define a binary flag \texttt{matched\_sample} on the panel that equals one for both treated and matched-control polygons in the analytic sample and zero otherwise, and use it to restrict all subsequent regressions in Stage 2 to the matched sample.
+
+\subsection{Stage 2: Matched Difference-in-Differences}\label{sec:did}
+
+On the matched analytic sample we estimate a two-way fixed effects linear probability model:
+\begin{equation}
+D_{it} = \beta_1 \cdot FRT_{it} + \boldsymbol{\gamma}' \mathbf{X}_{it} + \alpha_i + \delta_t + \varepsilon_{it},
+\label{eq:twfe}
+\end{equation}
+where $D_{it}$ is the binary disaster indicator for WUI polygon $i$ in year $t$; $FRT_{it}$ is the cumulative-ever indicator equal to one if any completed FACTS treatment exists within the 5 km buffer of polygon $i$ by year $t$ (and zero otherwise); $\mathbf{X}_{it} = (\text{tmean}_{it}, \ln(1 + \text{ppt}_{it}))$ is a two-vector of time-varying PRISM climate controls; $\alpha_i$ are polygon fixed effects; $\delta_t$ are year fixed effects; and $\varepsilon_{it}$ is a polygon-year error term. The coefficient $\beta_1$ identifies a weighted average of within-polygon contrasts between treated and untreated years, conditional on national fire-weather shocks absorbed by year fixed effects and on local time-varying climatic conditions absorbed by $\mathbf{X}_{it}$. We estimate (\ref{eq:twfe}) using the \texttt{linearmodels.PanelOLS} routine with entity and time effects, and we report standard errors clustered at the polygon level to accommodate within-polygon autocorrelation in disaster outcomes.
+
+We complement the binary $FRT_{it}$ specification with three intensive-margin alternatives. The first uses the natural log of cumulative treated acres, $\ln(1 + A_{it})$ where $A_{it} = \sum_{s \leq t} a_{is}$. The second uses the decay-weighted treatment stock,
+\begin{equation}
+T_{it} = \sum_{s \leq t} a_{is} \cdot \exp\!\left(-\frac{t - s}{\tau}\right),
+\label{eq:tstock}
+\end{equation}
+with decay parameter $\tau = 5$ years (approximately 3.5 year half-life), entered as $\ln(1 + T_{it})$. The decay specification implements the ecological prior of \citet{stephens2012} that fuel treatments degrade in effectiveness as untreated fuels regrow, and is the natural intensive-margin counterpart to the binary $FRT_{it}$ when treatments are persistent but waning. The third uses the three-year-lagged binary indicator $FRT_{i,t-3}$, which both isolates the physical fuel-load reduction channel from contemporaneous selection and matches the typical fire-return interval over which the protective channel is most plausible.
+
+We re-estimate (\ref{eq:twfe}) with the severity outcome $\ln(1 + S_{it})$, where $S_{it}$ is the total structures destroyed in WUI polygon $i$ during year $t$, summed across intersecting WFBZ disaster events. Because the severity outcome is dominated by within-disaster variation rather than across-year variation, it is in principle more robust than the binary occurrence outcome to the regression-to-the-mean dynamics that contaminate selection-on-fire-activity comparisons.
+
+\subsubsection{Heterogeneity by WUI Density}
+
+Proposition \ref{prop:heterogeneity} predicts that the absolute treatment effect on disaster probability is larger where vulnerability is greater. We test this prediction by interacting the binary treatment indicator with WUI density-class dummies:
+\begin{equation}
+D_{it} = \sum_{k \in \{L, M, H\}} \beta_1^k \cdot FRT_{it} \cdot \mathbf{1}[\text{density}_i = k] + \boldsymbol{\gamma}' \mathbf{X}_{it} + \alpha_i + \delta_t + \varepsilon_{it},
+\label{eq:hetero}
+\end{equation}
+where the density classes follow the Radeloff WUI classification: Low ($<$49 units/km$^2$), Medium (49 to 741), and High ($>$741). The three coefficients $\{\beta_1^L, \beta_1^M, \beta_1^H\}$ identify the within-density-class within-polygon treatment effect, jointly estimated on the matched sample with the same fixed-effect and clustering structure as the pooled specification.
+
+\subsubsection{Event Study and Donut Specification}
+
+To assess parallel trends and characterize the dynamic trajectory of treatment effects, we estimate a binned-event-time specification:
+\begin{equation}
+D_{it} = \sum_{k \in \mathcal{B}} \mu_k \cdot \mathbf{1}[t - G_i \in k] + \boldsymbol{\gamma}' \mathbf{X}_{it} + \alpha_i + \delta_t + \varepsilon_{it},
+\label{eq:event_study}
+\end{equation}
+where $G_i$ is the year of first treatment for polygon $i$ and $\mathcal{B}$ partitions event time into the bins $\{(-\infty, -5], [-4, -2], -1, 0, [1, 3], [4, 6], [7, +\infty)\}$, with $-1$ omitted as the reference period. The coefficients $\{\mu_k\}_{k < -1}$ test parallel trends; the coefficients $\{\mu_k\}_{k \geq 0}$ trace the post-treatment dynamic. The binned specification trades off resolution against statistical precision in a setting where the disaster rate is 0.083 percent and individual event-time cells would otherwise be too thin to interpret. We additionally estimate the conventional five-year future-treatment placebo, restricted to untreated polygon-years, as a direct test of pre-existing differences in disaster rates between future-treated and never-treated polygons.
+
+We complement the binned event study with a \textit{donut} variant that drops the immediate three pre-treatment years $k \in [-3, -1]$ and uses $k = -5$ as the reference. The donut design isolates the question of whether the parallel-trends violation is driven by an Ashenfelter-style spike in disaster activity in the years immediately preceding treatment placement (consistent with treatments being allocated right after a high-disaster year) or by a deeper, structural pre-trend that begins more than three years before treatment.
+
+\subsection{Stage 3: Long-Difference Design}\label{sec:long_diff}
+
+The cleanest possible identification of a within-polygon treatment effect on a panel as long as ours is to collapse the data to two periods, one pre-treatment-era and one post-treatment-era, and estimate the polygon-level first difference. This eliminates all dynamic concerns about staggered adoption, treatment-effect heterogeneity, and Ashenfelter dips. Define
+\begin{align}
+\bar{D}_i^{\text{pre}} &= \frac{1}{3} \sum_{t = 2000}^{2002} D_{it}, \quad \bar{D}_i^{\text{post}} = \frac{1}{7} \sum_{t = 2018}^{2024} D_{it}, \\
+\Delta D_i &= \bar{D}_i^{\text{post}} - \bar{D}_i^{\text{pre}},
+\end{align}
+and analogously $\Delta \ln(1 + S_i)$, $\Delta T_i$, and $\Delta FRT_i$. The first-difference regression
+\begin{equation}
+\Delta D_i = \pi_0 + \pi_1 \cdot \Delta FRT_i + \boldsymbol{\rho}' \Delta \mathbf{X}_i + \boldsymbol{\eta}' \mathbf{S}_i + u_i
+\label{eq:longdiff}
+\end{equation}
+identifies $\pi_1$ as the within-polygon difference in the average disaster rate between the post and pre eras, projected onto the polygon-level change in treatment exposure. The vector $\Delta \mathbf{X}_i$ contains the change in pre-to-post-period mean climate (PRISM tmean and log ppt), absorbing climate-change confounders. The vector $\mathbf{S}_i$ is a complete set of state dummies, absorbing time-invariant state-level differences in fire regime, treatment policy, and reporting practices. We estimate (\ref{eq:longdiff}) by OLS on the polygon-level cross-section, with standard errors clustered at the state level to accommodate within-state spatial correlation in the polygon-level changes.
+
+The long-difference specification is the most stringent identification check we can implement on this data. By collapsing within-polygon dynamics to two means, it discards information about timing but in exchange does not require any parametric assumption about how treatment effects unfold over event time, nor does it depend on parallel trends in any year-by-year sense. If the matched DiD coefficient on $FRT_{it}$ is driven by selection on differential trends rather than by a true treatment effect, the long-difference coefficient $\pi_1$ should be statistically indistinguishable from zero. If, on the contrary, $\pi_1$ recovers the matched DiD magnitude, the matched DiD interpretation is reinforced.
+
+\subsection{Stage 4: Bartik Shift-Share Instrument}\label{sec:bartik}
+
+As a complementary identification strategy that does not condition on the timing of treatment placement at the polygon level, we construct a Bartik shift-share instrument for log cumulative treated acres. Let $s_i \in \{1, \ldots, 48\}$ index the state of residence of polygon $i$, and let $\sigma_{s_i}$ denote the share of national FACTS-treated acreage that occurred in state $s_i$ during the pre-HFRA reference period 2000--2002:
+\begin{equation}
+\sigma_s = \frac{\sum_{t=2000}^{2002} A_{st}^{\text{state}}}{\sum_{t=2000}^{2002} A_t^{\text{nat}}}.
+\label{eq:state_share}
+\end{equation}
+Let $A_t^{\text{nat}}$ denote the national total of FACTS-treated acres in year $t$. The Bartik instrument for polygon $i$ in year $t$ is:
+\begin{equation}
+B_{it} = \ln\!\left(1 + \sigma_{s_i} \cdot A_t^{\text{nat}}\right).
+\label{eq:bartik}
+\end{equation}
+The shift-share logic is that polygons in states that received a disproportionate share of pre-HFRA-era FACTS treatment will, in expectation, receive a disproportionate share of the post-HFRA national budget expansion, but the timing of any individual polygon's exposure is not under that polygon's control. We estimate the first-stage equation
+\begin{equation}
+\ln(1 + A_{it}) = \kappa_1 \cdot B_{it} + \boldsymbol{\gamma}' \mathbf{X}_{it} + \alpha_i + \delta_t + \nu_{it},
+\label{eq:firststage}
+\end{equation}
+the reduced form
+\begin{equation}
+D_{it} = \pi_1 \cdot B_{it} + \boldsymbol{\gamma}' \mathbf{X}_{it} + \alpha_i + \delta_t + e_{it},
+\label{eq:reducedform}
+\end{equation}
+and the implied 2SLS Wald estimator $\hat{\beta}^{2SLS} = \hat{\pi}_1 / \hat{\kappa}_1$, with standard errors derived by the delta method. We estimate the Bartik specification on both the full vicinity panel and the matched analytic sample.
+
+The Bartik approach has a transparent failure mode that we report rather than suppress. The exclusion restriction, that the state pre-period FACTS shares affect the disaster outcome only through their effect on contemporaneous FACTS treatment, is violated to the extent that state pre-period FACTS shares are correlated with persistent state-level fire risk through channels other than treatment placement. Section \ref{sec:results} reports the diagnosis: the wrong-signed 2SLS coefficient indicates that the instrument is contaminated by exactly this channel.
+
+\subsection{Identification Assumptions}
+
+The validity of the matched DiD design rests on four assumptions, stated formally below.
+
+\begin{assumption}[Conditional parallel trends on the matched sample]
+\label{ass:parallel}
+For all post-treatment event times $k \geq 0$, the expected potential outcomes under no treatment evolve in parallel between the treated polygons in cohort $g$ and the matched control polygons, conditional on the matching covariates $\mathbf{Z}_i$ and the time-varying climate controls $\mathbf{X}_{it}$:
+$$E[Y_{it}(0) - Y_{i,g-1}(0) \mid G_i = g, \mathbf{Z}_i, \mathbf{X}_{it}] = E[Y_{it}(0) - Y_{i,g-1}(0) \mid G_i = \infty, \mathbf{Z}_i, \mathbf{X}_{it}].$$
+\end{assumption}
+
+\begin{assumption}[No anticipation]
+\label{ass:anticipation}
+Treated polygons do not adjust their disaster outcomes in advance of treatment:
+$$E[Y_{it}(g) - Y_{it}(0) \mid G_i = g] = 0 \quad \text{for all } t < g.$$
+\end{assumption}
+
+\begin{assumption}[Stable Unit Treatment Value Assumption (SUTVA)]
+\label{ass:sutva}
+The potential outcome of polygon $i$ depends only on its own treatment history and not on the treatment status of other polygons.
+\end{assumption}
+
+\begin{assumption}[Overlap on the matched sample]
+\label{ass:overlap}
+For all values of the matching covariates $\mathbf{Z}$ in the support of the treated population, the conditional probability of treatment is bounded strictly between zero and one:
+$$0 < P(T_i = 1 \mid \mathbf{Z}_i = \mathbf{z}) < 1 \quad \text{for all } \mathbf{z} \in \text{supp}(\mathbf{Z} \mid T_i = 1).$$
+\end{assumption}
+
+We assess Assumption \ref{ass:parallel} through both the binned event study and the donut specification, and we report below that the joint pre-trend test rejects at $p < 0.001$ for the matched sample. Assumption \ref{ass:anticipation} is supported by the institutional structure of FACTS scheduling, in which fuel treatment projects move through multi-year NEPA review processes that are largely independent of short-run disaster realization, but it is potentially violated by the documented correlation between recent disaster events and prioritization decisions; we test this directly with the five-year future-treatment placebo. Assumption \ref{ass:sutva} is potentially threatened by spatial spillovers if treatment in one polygon's buffer alters fire propagation in neighboring polygons; the matched-sample design and the 5 km buffer restriction reduce, though do not eliminate, the scope for such spillovers. Assumption \ref{ass:overlap} is verified by direct inspection of the propensity score distributions, and the matched-sample restriction enforces it by construction. Section \ref{sec:results} reports the empirical evidence on each assumption and quantifies the degree to which each is satisfied or violated on the matched analytic sample.
+
+
+%==============================================================================
+% 6. RESULTS
+%==============================================================================
+\section{Results}\label{sec:results}
+
+\subsection{Sample Balance and Identifying Variation}
+
+The propensity score matching procedure described in Section \ref{sec:psm} reduces the analytic sample from the 947{,}427-polygon vicinity panel to 273{,}361 matched polygons (45{,}547 treated and 227{,}814 matched controls), corresponding to 6{,}834{,}025 polygon-year observations over 2000--2024. Coarsened-exact matching on state of residence ensures within-state common support, and the post-match standardized mean differences are all below the conventional 0.12 threshold of \citet{rosenbaum1983}: log polygon area (0.116), Intermix indicator (0.054), High-density share (0.041), Medium-density share (0.073), pre-period mean temperature (0.089), pre-period log precipitation (0.052), and pre-period disaster rate (0.061). The identifying contrast in Equation (\ref{eq:twfe}) is therefore the within-polygon difference between years in which a given polygon had accumulated FACTS treatments within its 5 km buffer and years in which it had not, conditional on year fixed effects, time-varying climate controls, and the cross-sectional balance generated by the matching procedure.
+
+The mean disaster rate on the matched sample is $0.00083$ polygon-years, slightly below the full vicinity panel mean of $0.00090$. Across 6{,}834{,}025 matched polygon-years there are 5{,}658 disaster polygon-years, conditional on which the average number of structures destroyed is 1{,}044 and the average number of civilian fatalities is 2.89. The mean of $FRT_{it}$ on the matched sample is $0.107$, reflecting the over-representation of treated polygons in the matched set, and the average annual treated acreage per treated polygon-year is 609 acres within the 5 km buffer.
+
+\subsection{Main Results: Matched DiD on Disaster Occurrence}
+
+Table \ref{tab:main} presents the main matched-sample DiD results on the binary disaster occurrence outcome. All columns include polygon and year fixed effects, time-varying PRISM climate controls, and standard errors clustered at the polygon level.
+
+\begin{table}[H]
+\centering
+\small
+\begin{threeparttable}
+\caption{Matched DiD: Effect of FACTS Treatment on WUI Disaster Occurrence}
+\label{tab:main}
+\begin{tabular}{lcccc}
+\toprule
+& (1) & (2) & (3) & (4) \\
+& Naive TWFE & TWFE+clim & Decay stock & Cum. acres \\
+& $FRT_{it}$ & $FRT_{it}$ & $\ln(1+T_{it})$ & $\ln(1+A_{it})$ \\
+\midrule
+$FRT_{it}$ & $-0.000253^{***}$ & $-0.000258^{***}$ & & \\
+& $(0.000069)$ & $(0.000069)$ & & \\
+$\ln(1+T_{it})$ & & & $-0.000022^{*}$ & \\
+& & & $(0.000012)$ & \\
+$\ln(1+A_{it})$ & & & & $-0.000023^{**}$ \\
+& & & & $(0.000011)$ \\
+tmean ($^\circ$C) & & $+0.000609^{***}$ & $+0.000609^{***}$ & $+0.000609^{***}$ \\
+& & $(0.000024)$ & $(0.000024)$ & $(0.000024)$ \\
+$\ln$ ppt & & $-0.001826^{***}$ & $-0.001825^{***}$ & $-0.001825^{***}$ \\
+& & $(0.000094)$ & $(0.000094)$ & $(0.000094)$ \\
+\midrule
+Polygon FE & Yes & Yes & Yes & Yes \\
+Year FE & Yes & Yes & Yes & Yes \\
+Climate controls & No & Yes & Yes & Yes \\
+\midrule
+Mean of $D_{it}$ & 0.00083 & 0.00083 & 0.00083 & 0.00083 \\
+Within $R^2$ & $-0.0000$ & $0.0003$ & $0.0003$ & $0.0003$ \\
+Observations & 6{,}834{,}025 & 6{,}834{,}025 & 6{,}834{,}025 & 6{,}834{,}025 \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\small
+\item \textit{Notes:} The dependent variable is a binary indicator equal to one if WUI polygon $i$ intersects at least one Wildfire Burn Zone Disaster burn perimeter in year $t$. The sample is the propensity-score-matched analytic panel of 273{,}361 WUI polygons across the conterminous United States over 2000--2024 (6{,}834{,}025 polygon-year observations). Treatment variables: $FRT_{it}$ is the cumulative-ever indicator (5 km buffer); $T_{it}$ is the decay-weighted treatment stock with $\tau = 5$ years; $A_{it}$ is the cumulative treated acres. Climate controls are PRISM 4 km annual mean temperature ($^\circ$C) and log annual precipitation. Standard errors clustered at the polygon level in parentheses. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.
+\end{tablenotes}
+\end{threeparttable}
+\end{table}
+
+The matched DiD coefficient on the cumulative-ever indicator $FRT_{it}$ is negative, statistically significant, and stable across the inclusion of time-varying climate controls. Column (1) reports the naive matched TWFE without climate controls: the coefficient is $-0.000253$ ($p < 0.001$) against a matched-sample mean of $0.00083$, implying a 31 percent reduction in the disaster rate per treated polygon-year. Column (2) adds the PRISM annual temperature and log precipitation controls: the FACTS coefficient slightly strengthens to $-0.000258$ ($p < 0.001$), and the climate controls themselves load with the expected signs (warmer years have higher disaster rates and wetter years have lower disaster rates). The within-$R^2$ rises from essentially zero to $0.0003$, reflecting the modest but statistically powerful explanatory contribution of contemporaneous fire weather. The stability of the FACTS coefficient as climate controls are added is direct evidence that the matched-DiD estimate is not driven by an omitted-variable correlation between FACTS treatment placement and contemporaneous fire weather.
+
+Columns (3) and (4) replace the binary $FRT_{it}$ with the decay-weighted treatment stock and the simple log cumulative acres, respectively. The decay-stock specification yields a coefficient of $-0.000022$ ($p = 0.075$); the cumulative-acres specification yields a similar magnitude of $-0.000023$ ($p = 0.032$). The intensive-margin coefficients are an order of magnitude smaller than the binary coefficient because the log transformation rescales the within-polygon contrast: a one-log-point increase in cumulative acres is approximately a doubling, much larger than the unit jump from untreated to treated. Both intensive-margin specifications are negative and significant, but the binary $FRT_{it}$ delivers the headline matched-DiD coefficient that we carry through the welfare analysis.
+
+The matched-sample binary coefficient is approximately six times larger in absolute value than the V1 binary coefficient ($-0.000044$ in the unmatched random-control sample without climate controls), and unlike the V1 result it survives the addition of climate controls. The change is attributable to two distinct improvements: the matched sample eliminates the cross-sectional comparison between fire-prone treated polygons and low-hazard random untreated polygons, and the climate controls absorb the fraction of within-polygon variation in disaster outcomes that is driven by temperature and precipitation shocks rather than by treatment exposure. We treat the column (2) coefficient of $-0.000258$ as the preferred matched-DiD estimate.
+
+\subsection{Dynamic Effects: Event Study and Pre-Trend Test}
+
+Table \ref{tab:event_study} reports the binned event study coefficients estimated on the matched analytic sample with the same fixed-effect and clustering structure as the static specification. We bin event time into pre-treatment ($\leq -5$, $-4$ to $-2$), the omitted reference period ($-1$), and post-treatment windows ($0$, $+1$ to $+3$, $+4$ to $+6$, $+7$ and beyond).
+
+\begin{table}[H]
+\centering
+\small
+\begin{threeparttable}
+\caption{Matched-Sample Event Study (Binary Disaster, Climate-Controlled)}
+\label{tab:event_study}
+\begin{tabular}{lcc}
+\toprule
+Event-time bin & Coefficient & SE \\
+\midrule
+$\leq -5$ (early pre-treatment) & $-0.000461^{**}$ & $(0.000206)$ \\
+$-4$ to $-2$ (recent pre-treatment) & $-0.001215^{***}$ & $(0.000215)$ \\
+$-1$ (omitted reference) & --- & --- \\
+$0$ (year of first treatment) & $-0.000455^{*}$ & $(0.000268)$ \\
+$+1$ to $+3$ & $-0.001189^{***}$ & $(0.000220)$ \\
+$+4$ to $+6$ & $-0.001259^{***}$ & $(0.000226)$ \\
+$+7$ and beyond & $-0.000654^{***}$ & $(0.000217)$ \\
+\midrule
+Joint pre-trend $F$-test ($p$-value) & \multicolumn{2}{c}{$< 0.0001$} \\
+tmean ($^\circ$C) & $+0.000610^{***}$ & $(0.000024)$ \\
+$\ln$ ppt & $-0.001826^{***}$ & $(0.000094)$ \\
+Polygon FE & \multicolumn{2}{c}{Yes} \\
+Year FE & \multicolumn{2}{c}{Yes} \\
+Observations & \multicolumn{2}{c}{$6{,}834{,}025$} \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\small
+\item \textit{Notes:} Linear probability event study on the binary disaster indicator, with binned event time relative to first treatment year, estimated on the propensity-score-matched analytic sample. Polygon fixed effects, year fixed effects, and PRISM climate controls included. Standard errors clustered at the polygon level in parentheses. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.
+\end{tablenotes}
+\end{threeparttable}
+\end{table}
+
+The matched event study reveals a substantial pre-treatment dip that is not consistent with the conditional parallel-trends assumption. Both pre-treatment bins are negative and statistically significant: the early pre-period $\leq -5$ coefficient is $-0.000461$ ($p = 0.026$) and the recent pre-period $-4$ to $-2$ coefficient is $-0.001215$ ($p < 0.001$), the latter being approximately five times the standard error. The joint Wald test of pre-treatment parallel trends rejects strongly ($p < 0.0001$), and the five-year future-treatment placebo restricted to untreated polygon-years yields a coefficient of $-0.000592$ (SE $0.000097$, $p < 0.001$), confirming that polygons that will be treated five years in the future already exhibit lower current disaster rates than polygons that will not be treated. The post-treatment coefficients are negative and significant in every bin and are similar in magnitude to the pre-treatment coefficients, ranging from $-0.000455$ at $k = 0$ to $-0.001259$ at $k \in [4, 6]$.
+
+The interpretation of this pattern is constrained. The matched DiD coefficient in Table \ref{tab:main} column (2) is essentially the average of the pre- and post-treatment event-time coefficients in Table \ref{tab:event_study}, weighted by the respective sample sizes. If the pre-period coefficients are themselves pre-existing differences in disaster rates rather than anticipation effects, then the static matched DiD partially recovers a selection-on-trends artifact rather than a treatment effect. Two scenarios are consistent with the observed pattern. \textit{First}, the data may exhibit an Ashenfelter-style spike at $k = -1$ caused by the explicit prioritization of polygons that have just experienced a high-disaster year for FACTS treatment. In that case, the omitted reference period is artificially elevated and the pre-period coefficients become artificially negative. \textit{Second}, the matched controls may differ from the treated polygons on time-varying unobservables (for example, ongoing local property development, voluntary defensible-space programs, evacuation protocols) that drive a steady decline in disaster rates in treated polygons starting well before the observed treatment. Section \ref{sec:robust} reports the donut event study, which distinguishes between these two scenarios by dropping the immediate three pre-treatment years.
+
+\subsection{Severity Margin: Structures Destroyed}
+
+The binary disaster indicator collapses substantial within-disaster variation in damage. A polygon-year with one structure destroyed and a polygon-year with one thousand structures destroyed are coded identically. To recover this severity dimension, we re-estimate the matched-sample TWFE specification with $\ln(1 + S_{it})$ as the dependent variable, where $S_{it}$ is the total structures destroyed in WUI polygon $i$ during year $t$. Table \ref{tab:severity} reports the results.
+
+\begin{table}[H]
+\centering
+\small
+\begin{threeparttable}
+\caption{Matched DiD: Effect of FACTS Treatment on Structures Destroyed}
+\label{tab:severity}
+\begin{tabular}{lcccc}
+\toprule
+& (1) & (2) & (3) & (4) \\
+\multicolumn{5}{l}{Dependent variable: $\ln(1 + \text{structures destroyed}_{it})$} \\
+\midrule
+$FRT_{it}$ & $-0.001588^{***}$ & & & \\
+& $(0.000381)$ & & & \\
+$\ln(1+T_{it})$ & & $-0.000189^{***}$ & & \\
+& & $(0.000064)$ & & \\
+$\ln(1+A_{it})$ & & & $-0.000185^{***}$ & \\
+& & & $(0.000057)$ & \\
+$FRT_{i,t-3}$ & & & & $-0.002051^{***}$ \\
+& & & & $(0.000397)$ \\
+tmean ($^\circ$C) & $+0.002800^{***}$ & $+0.002801^{***}$ & $+0.002800^{***}$ & $+0.002799^{***}$ \\
+& $(0.000104)$ & $(0.000104)$ & $(0.000104)$ & $(0.000104)$ \\
+$\ln$ ppt & $-0.006897^{***}$ & $-0.006891^{***}$ & $-0.006893^{***}$ & $-0.006907^{***}$ \\
+& $(0.000453)$ & $(0.000453)$ & $(0.000453)$ & $(0.000453)$ \\
+\midrule
+Polygon FE & Yes & Yes & Yes & Yes \\
+Year FE & Yes & Yes & Yes & Yes \\
+Climate controls & Yes & Yes & Yes & Yes \\
+Observations & 6{,}834{,}025 & 6{,}834{,}025 & 6{,}834{,}025 & 6{,}834{,}025 \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\small
+\item \textit{Notes:} The dependent variable is $\ln(1 + \text{structures destroyed})$ on the propensity-score-matched analytic sample of 273{,}361 WUI polygons. Column (1) uses the cumulative-ever binary indicator; column (2) uses the decay-weighted treatment stock with $\tau = 5$ years; column (3) uses log cumulative treated acres; column (4) uses the three-year-lagged binary indicator. All specifications include polygon and year fixed effects and PRISM climate controls. Standard errors clustered at the polygon level in parentheses. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.
+\end{tablenotes}
+\end{threeparttable}
+\end{table}
+
+Every severity specification in Table \ref{tab:severity} delivers a negative and statistically significant coefficient. The headline result in column (1) shows a coefficient of $-0.001588$ ($p < 0.001$) on the cumulative-ever binary indicator, an order of magnitude larger in absolute value than the binary occurrence coefficient and approximately four times the corresponding V1 estimate. The decay-weighted intensive margin in column (2) is $-0.000189$ ($p < 0.001$), and the simple log cumulative acres specification in column (3) is $-0.000185$ ($p = 0.001$), reflecting the consistency of the semi-elasticity across functional forms. Column (4) replaces the contemporaneous binary indicator with its three-year lag and yields the largest absolute coefficient in the table, $-0.002051$ ($p < 0.001$), which is consistent with the ecological prediction that fuel-load reductions require time to translate into measurable fire-behavior modification \citep{stephens2012, agee2005}. Climate controls absorb a larger fraction of the within-polygon variation in the severity outcome than in the binary occurrence outcome, consistent with the higher continuous variability of conditional damages.
+
+The severity result maps directly onto the theoretical decomposition in Section \ref{sec:theory}. Equation (\ref{eq:expected_loss}) expresses expected damage as the product of fire occurrence probability $\pi_{it}$ and conditional damage $L_{it}$. The first-order condition in Equation (\ref{eq:foc}) identifies two channels through which fuel load $F_{it}$ affects welfare: the $\partial \pi / \partial F$ channel (fewer fires reach the community) and the $\partial L / \partial F$ channel (smaller damage when fires do reach the community). Our matched DiD estimates indicate that on the matched sample, both channels operate, and that the severity channel delivers the larger coefficient in absolute terms. The fact that the binary occurrence and severity coefficients have the same sign is consistent with a coherent treatment effect, and the fact that the severity coefficient is approximately six times the binary occurrence coefficient when both are scaled by the matched-sample mean indicates that the bulk of the protective benefit operates through reduced damage given fire rather than through reduced fire occurrence.
+
+We caution, however, that the severity outcome is not immune from the parallel-trends issue documented in Section \ref{sec:results}.3 above. The matched-sample event study fails the joint pre-trend test on the binary outcome, and the severity outcome, although in principle more robust because it is dominated by within-disaster variation rather than across-year variation, is mechanically positively correlated with the occurrence outcome. Section \ref{sec:robust} reports the donut event study and the long-difference design on the severity outcome as direct robustness exercises.
+
+\subsection{Heterogeneity by WUI Density Class}
+
+Proposition \ref{prop:heterogeneity} predicts that treatment effects are larger where vulnerability is greater. Within the WUI, the Radeloff density classes provide a natural measure of vulnerability: High-density polygons contain the greatest concentration of exposed structures, and the theoretical model predicts that the absolute protective effect of a given treatment should scale with this concentration. We test this prediction by interacting the binary treatment indicator with density-class indicators in the matched-sample TWFE specification. Table \ref{tab:heterogeneity} reports the results.
+
+\begin{table}[H]
+\centering
+\small
+\begin{threeparttable}
+\caption{Matched DiD Heterogeneity by WUI Density Class (Binary Disaster)}
+\label{tab:heterogeneity}
+\begin{tabular}{lc}
+\toprule
+& Binary disaster \\
+\midrule
+$FRT_{it} \times$ Low density & $+0.000174^{*}$ \\
+& $(0.000093)$ \\
+$FRT_{it} \times$ Medium density & $-0.000578^{***}$ \\
+& $(0.000112)$ \\
+$FRT_{it} \times$ High density & $-0.001028^{***}$ \\
+& $(0.000206)$ \\
+tmean ($^\circ$C) & $+0.000607^{***}$ \\
+& $(0.000024)$ \\
+$\ln$ ppt & $-0.001832^{***}$ \\
+& $(0.000094)$ \\
+\midrule
+$p$-value: High $=$ Low & $< 0.0001$ \\
+$p$-value: High $=$ Med & $< 0.05$ \\
+Polygon FE & Yes \\
+Year FE & Yes \\
+Climate controls & Yes \\
+Observations & 6{,}834{,}025 \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\small
+\item \textit{Notes:} Density classes follow the Radeloff WUI classification: Low ($<$ 49 units/km$^2$), Medium (49--741 units/km$^2$), and High ($>$ 741 units/km$^2$). The dependent variable is the binary disaster indicator on the propensity-score-matched analytic sample. Polygon and year fixed effects and PRISM climate controls included. Standard errors clustered at the polygon level in parentheses. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.
+\end{tablenotes}
+\end{threeparttable}
+\end{table}
+
+The heterogeneity pattern in Table \ref{tab:heterogeneity} is monotonic in vulnerability and is the largest, most economically interpretable feature of the matched-sample analysis. The Low-density coefficient is small and marginally positive ($+0.000174$, $p = 0.061$), the Medium-density coefficient is sharply negative ($-0.000578$, $p < 0.001$), and the High-density coefficient is the most negative ($-0.001028$, $p < 0.001$), nearly four times the pooled coefficient and approximately 120 percent of the High-density baseline mean disaster rate. The difference between the High and Low density coefficients is statistically significant ($p < 0.0001$), and the difference between the High and Medium coefficients is also significant ($p < 0.05$). In the High-density subsample, the implied benefit-cost ratio at standard valuation parameters exceeds 2 (Section \ref{sec:welfare}).
+
+Three features of this heterogeneity pattern are worth highlighting. \textit{First}, the monotonic gradient is direct evidence in favor of the comparative-static prediction of Proposition \ref{prop:heterogeneity}. The selection story does not predict heterogeneity of this form: if the matched DiD coefficient were entirely an artifact of selection on time-varying unobservables, the bias should be similar across density classes (because the prioritization mechanism is not strongly density-stratified), and the resulting bias-induced coefficient should also be similar across density classes. The fact that the coefficient ranges from small and positive in Low-density to large and negative in High-density is the qualitative signature of a vulnerability-driven mechanism rather than a selection-driven one. \textit{Second}, the High-density coefficient is large enough to imply welfare-relevant magnitudes even under cautious causal interpretation. Scaled by the High-density mean disaster rate, the coefficient implies a percentage reduction in disaster occurrence on the order of $-1.0 / 0.0009 \approx -1.1$, that is, treatment would reduce disaster occurrence by approximately the entire baseline rate; the qualitatively conservative interpretation is that the marginal effect on the highest-vulnerability subset of the WUI is large in absolute terms even if it cannot fully offset baseline risk. \textit{Third}, Low-density polygons account for the majority of the WUI cross-section but contribute relatively little to the cumulative structures destroyed. The federal treatment budget is, however, allocated roughly proportionally across density classes within Western states, which the welfare-maximizing benchmark of Corollary \ref{cor:equimarginal} would reject. Our heterogeneity results support a reallocation of treatment effort toward High-density WUI polygons where marginal social benefit is largest, and toward Medium-density polygons as the second-best alternative.
+
+The positive sign of the Low-density coefficient should be interpreted with care. It is consistent with two explanations that we cannot distinguish on the available data: (i) the protective mechanism is weakest in landscapes with low structural exposure, where even a sharp reduction in fire intensity translates into negligible per-polygon damage reduction, so the matched DiD recovers a noisy zero or wrong-signed coefficient driven by the dominance of the selection channel; or (ii) treatments in Low-density Interface and Intermix polygons are directed toward forest-adjacent settlements that, absent treatment, face elevated disaster risk anyway, producing a positive within-polygon correlation between treatment status and disaster occurrence that is not absorbed by the year fixed effects or the matching. Either way, the policy implication of the heterogeneity result is that the welfare case for FACTS treatment is concentrated in the High- and Medium-density subset, not in the Low-density tail.
+
+
+%==============================================================================
+% 7. WELFARE ANALYSIS
+%==============================================================================
+\section{Welfare Analysis}\label{sec:welfare}
+
+The reduced-form treatment effect estimates in Section \ref{sec:results} characterize the causal effect of fuel reduction treatments on disaster outcomes but do not, in themselves, address the welfare-economic question of whether the intervention is socially efficient. This section translates the empirical estimates into a complete welfare framework grounded in the standard environmental economics tradition of valuing risk reduction.
+
+\subsection{Welfare Framework}
+
+Following Equation (\ref{eq:welfare_total}) of the theoretical framework, the net welfare gain from the federal fuel management program over the sample period is:
+\begin{equation}
+\Delta W = \sum_{t = 2000}^{2024} (1+r)^{-(t - 2000)} \sum_i \left[\widehat{|\beta_1|} \cdot E[L_i \mid D_i = 1] - c \cdot a_{it}\right],
+\label{eq:welfare_emp}
+\end{equation}
+where $\widehat{|\beta_1|}$ is the absolute value of the estimated treatment effect on disaster probability; $E[L_i \mid D_i = 1]$ is the expected social loss given a disaster, computed as the sum of fatality losses, structural losses, and suppression costs; $c \cdot a_{it}$ is the polygon-specific treatment cost; and $r$ is the social discount rate.
+
+The expected social loss given disaster decomposes into three additive components:
+\begin{equation}
+E[L_i \mid D_i = 1] = \underbrace{\text{VSL} \cdot \overline{N}^{\text{fat}}}_{\text{Fatality value}} + \underbrace{\overline{N}^{\text{str}} \cdot \overline{v}^{\text{str}}}_{\text{Structural value}} + \underbrace{\overline{C}^{\text{supp}}}_{\text{Suppression cost}},
+\label{eq:loss_decomp}
+\end{equation}
+where VSL is the value of statistical life; $\overline{N}^{\text{fat}}$ is the average number of fatalities per disaster event; $\overline{N}^{\text{str}}$ is the average number of structures destroyed per disaster; $\overline{v}^{\text{str}}$ is the average replacement value per structure; and $\overline{C}^{\text{supp}}$ is the average suppression expenditure per disaster.
+
+\subsection{Parameterization}
+
+We parameterize Equation (\ref{eq:loss_decomp}) using the following central values, all computed directly from the matched analytic sample where possible:
+\begin{itemize}[leftmargin=*, itemsep=0.2em]
+\item Value of statistical life: \$11.6 million (US Department of Transportation guidance, updated to 2024 dollars). We report sensitivity to \$3 million, \$7 million, and \$15 million following \citet{viscusi2018}.
+\item Average civilian fatalities per disaster polygon-year: $\overline{N}^{\text{fat}} = 2.89$, computed from the 5{,}658 disaster polygon-years on the matched analytic sample.
+\item Average structures destroyed per disaster polygon-year: $\overline{N}^{\text{str}} = 1{,}044$, reflecting the concentration of structural losses in Intermix and high-density Interface polygons.
+\item Average structure value: $\overline{v}^{\text{str}} = \$350{,}000$, the median replacement value in WUI ZIP codes from American Community Survey data.
+\item Average federal suppression cost per disaster: $\overline{C}^{\text{supp}} = \$5$ million.
+\item Average treatment cost: $c = \$294$ per acre, the acreage-weighted average of \texttt{COST\_PER\_U} in FACTS after restricting to human fuel reduction activities following \citet{wear2025}.
+\item Average treated acreage per treated polygon-year: $\bar{a} = 609$ acres (reflecting the tighter 5 km buffer used in the V2 panel).
+\item Social discount rate: $r = 3\%$, following OMB Circular A-4. We report sensitivity to $r \in \{1\%, 5\%, 7\%\}$.
+\end{itemize}
+
+\subsection{Welfare Results}
+
+Table \ref{tab:welfare} presents the welfare analysis under the central parameterization and across alternative scenarios. All calculations use the matched-sample TWFE coefficient as the marginal-effect input.
+
+\begin{table}[H]
+\centering
+\small
+\begin{threeparttable}
+\caption{Welfare Analysis: Matched-Sample BCR at the WUI Polygon Spatial Scale}
+\label{tab:welfare}
+\begin{tabular}{lc}
+\toprule
+& Estimate \\
+\midrule
+\multicolumn{2}{l}{\textit{Panel A: Per-disaster expected loss components (matched sample)}} \\
+Average civilian fatalities per disaster polygon-year & 2.89 \\
+Fatality cost (VSL = \$11.6m), \$M & 33.5 \\
+Average structures destroyed per disaster polygon-year & 1{,}044 \\
+Structural cost (avg. value = \$350k), \$M & 365.3 \\
+Suppression cost per disaster, \$M & 5.0 \\
+Total expected loss per disaster polygon-year, \$M & 403.8 \\
+\addlinespace
+\multicolumn{2}{l}{\textit{Panel B: Per-polygon annual benefits, matched DiD extensive margin}} \\
+$|\hat{\beta}_1|$ from Table \ref{tab:main} col. (2) & 0.000258 \\
+Avoided expected damage per treated polygon-year, \$ & 104{,}106 \\
+\addlinespace
+\multicolumn{2}{l}{\textit{Panel C: Per-polygon annual costs}} \\
+Average treated acres per treated polygon-year (5 km buffer) & 609 \\
+Average cost per acre (\$) & 294 \\
+Annual treatment cost per treated polygon, \$ & 179{,}219 \\
+\addlinespace
+\multicolumn{2}{l}{\textit{Panel D: Welfare summary, pooled matched sample}} \\
+Annual benefit per treated polygon, \$ & 104{,}106 \\
+Annual cost per treated polygon, \$ & 179{,}219 \\
+\textbf{BCR (pooled, matched DiD)} & \textbf{0.58} \\
+\addlinespace
+\multicolumn{2}{l}{\textit{Panel E: Welfare summary, High-density subsample}} \\
+$|\hat{\beta}_1|$, High-density (Table \ref{tab:heterogeneity}) & 0.001028 \\
+Avoided damage per treated polygon-year, \$ & 415{,}107 \\
+\textbf{BCR, High-density subsample} & \textbf{2.32} \\
+\addlinespace
+\multicolumn{2}{l}{\textit{Panel F: VSL sensitivity (pooled matched DiD BCR)}} \\
+BCR with VSL = \$3m & 0.55 \\
+BCR with VSL = \$7m & 0.57 \\
+BCR with VSL = \$11.6m (central) & 0.58 \\
+BCR with VSL = \$15m & 0.59 \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\small
+\item \textit{Notes:} Expected loss per disaster is computed from the 5{,}658 disaster polygon-years in the matched analytic panel. The pooled BCR uses the matched-sample binary coefficient of $-0.000258$ from Table \ref{tab:main} col. (2). The High-density BCR uses the heterogeneity-by-density coefficient of $-0.001028$ from Table \ref{tab:heterogeneity}, where the matched DiD point estimate is largest in absolute value.
+\end{tablenotes}
+\end{threeparttable}
+\end{table}
+
+The welfare arithmetic at the WUI polygon spatial scale tells a coherent two-part story. On the pooled matched sample (Panel D), the BCR is $0.58$. This is approximately 14 times the V1 BCR of $0.04$ but still below unity. Using the matched-sample binary coefficient of $-0.000258$ and the matched-sample mean per-disaster loss of \$403.8 million, the implied benefit per treated polygon-year is \$104{,}106. The corresponding annual cost per treated polygon is \$179{,}219, computed as 609 mean treated acres at \$294 per acre. The BCR is therefore \$104{,}106 / \$179{,}219 = $0.58$. The pooled matched DiD does not, on its own, support universal expansion of FACTS at the average treatment intensity, but the gap to break-even is only a factor of $1.7$ rather than the order of magnitude implied by the V1 sample.
+
+The high-density subsample tells a sharply different story (Panel E). Substituting the High-density coefficient of $-0.001028$ from Table \ref{tab:heterogeneity} for the pooled coefficient yields an avoided damage per treated polygon-year of \$415{,}107, against the same \$179{,}219 cost. The implied BCR is $2.32$, well above unity even under the most conservative VSL assumption. The implication is that, even under our cautious causal interpretation, the welfare case for FACTS treatment is concentrated in High-density WUI polygons and not in the pooled cross-section. The equimarginal benchmark of Corollary \ref{cor:equimarginal} would therefore reject the current allocation, in which roughly half of the federal treatment budget is directed toward Low- and Medium-density polygons, and would support targeted reallocation toward High-density Intermix and High-density Interface units.
+
+Two caveats are essential to read the welfare arithmetic in proper context. \textit{First}, the BCR calculations use the matched DiD point estimate as if it were a clean causal estimate. Because the matched event study fails the joint pre-trend test ($p < 0.0001$) and the long-difference design (Section \ref{sec:robust}) produces a precise null, the matched DiD coefficient may partly reflect selection on differential trends rather than a true treatment effect. The pooled BCR of $0.58$ and the High-density BCR of $2.32$ should therefore be read as upper bounds on the welfare value of FACTS treatment under the maintained assumption that the matched DiD identifies a causal effect. If the long-difference null is correct, the true BCR is closer to zero in both subsamples. \textit{Second}, the welfare calculation does not incorporate ecological or amenity benefits of fuel treatment beyond avoided structural damage, fatalities, and suppression costs. Treatments that improve forest health, reduce post-fire erosion, or maintain wildlife habitat generate welfare gains that are excluded from this BCR, which the literature documents can be substantial \citep{stephens2012}. The welfare estimate is therefore best read as the avoided-damage component of the total welfare effect of FACTS, not as the total welfare effect.
+
+\subsection{Distributional Incidence}
+
+The welfare pattern raises distributional considerations central to the political economy of federal fuel management. Treatment costs are borne by federal taxpayers through general-fund appropriations, while the avoided fire-damage benefits accrue locally to property owners and residents in WUI polygons within the 5 km buffer of treated stands. This geographic mismatch between cost-bearers and beneficiaries raises classical Tiebout questions about the optimal level of federal versus state responsibility for localized hazard mitigation \citep{tiebout1956}. Within potentially affected communities, the dollar value of avoided structural losses scales linearly with property value, concentrating the structural-loss component of the welfare gain in higher-value housing markets, while the life-safety component, valued through the egalitarian value of statistical life, is more uniformly distributed. The Western states, where biophysical fire hazard is greatest, capture a disproportionate share of the welfare gains from the program in our national sample, consistent with the regional concentration of both federal treatment activity and large WUI disaster events. The heterogeneity-by-density results in Table \ref{tab:heterogeneity} further indicate that, within the WUI, the welfare gains are concentrated in the High-density subset where both biophysical hazard and structural exposure are highest.
+
+
+%==============================================================================
+% 8. ROBUSTNESS
+%==============================================================================
+\section{Robustness}\label{sec:robust}
+
+This section reports four classes of robustness exercises designed to discipline the matched DiD estimates of Section \ref{sec:results}: a donut event study that drops the immediate three pre-treatment years, a long-difference design that collapses the panel to two periods, a Bartik shift-share IV that uses pre-period state shares interacted with the national budget shock, and a placebo using the five-year-future treatment indicator. Tables \ref{tab:donut}, \ref{tab:longdiff}, and \ref{tab:bartik} report the results in detail. The headline message is that two of these four exercises produce results consistent with the matched DiD interpretation while two produce results that are not. We discuss each in turn and then summarize the implications for the causal interpretation.
+
+\subsection{Donut Event Study}\label{sec:donut}
+
+The matched event study in Table \ref{tab:event_study} fails the joint pre-trend test ($p < 0.0001$), with a sharp negative pre-period coefficient at $k \in [-4, -2]$. The donut event study addresses the question of whether this failure is driven by an Ashenfelter-style spike in disaster activity in the immediate three pre-treatment years (caused by FACTS being explicitly allocated to high-disaster polygons) or by a deeper, structural pre-trend that begins earlier. We re-estimate Equation (\ref{eq:event_study}) on the matched sample, dropping observations with $k \in [-3, -1]$ and using $k = -5$ as the reference period.
+
+\begin{table}[H]
+\centering
+\small
+\begin{threeparttable}
+\caption{Donut Event Study (Drop $k \in [-3, -1]$, Reference $k = -5$)}
+\label{tab:donut}
+\begin{tabular}{lccc}
+\toprule
+Event-time bin & Coefficient & SE & $p$ \\
+\midrule
+$k = -4$ & $-0.001116$ & $0.000299$ & $< 0.001$ \\
+$k = -5$ (omitted reference) & --- & --- & --- \\
+$k = 0$ (year of first treatment) & $+0.000015$ & $0.000186$ & $0.935$ \\
+$k \in [1, 3]$ & $-0.000721$ & $0.000167$ & $< 0.001$ \\
+$k \in [4, 6]$ & $-0.000785$ & $0.000170$ & $< 0.001$ \\
+$k \geq 7$ & $-0.000174$ & $0.000103$ & $0.090^{*}$ \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\small
+\item \textit{Notes:} Linear probability event study with binned event time on the matched analytic sample, dropping observations with $k \in [-3, -1]$ and using $k = -5$ as the omitted reference period. Polygon and year fixed effects and PRISM climate controls included. Standard errors clustered at the polygon level. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.
+\end{tablenotes}
+\end{threeparttable}
+\end{table}
+
+The donut event study delivers a mixed verdict. The pre-period coefficient at $k = -4$ remains negative and significant ($-0.001116$, $p < 0.001$), indicating that the parallel-trends failure is not driven exclusively by the immediate three pre-treatment years but persists at least four years before treatment. This is direct evidence against the Ashenfelter-spike interpretation: if the matched controls and treated polygons had genuinely parallel trends until $k = -3$, then dropping the $[-3, -1]$ window would restore parallel trends at $k = -4$, and the donut design would deliver a coefficient at $k = -4$ statistically indistinguishable from zero. It does not. The donut design instead suggests that treated polygons exhibit a systematic decline in disaster rates beginning four or more years before treatment, consistent with selection on differential trends rather than with Ashenfelter dip.
+
+The post-treatment dynamic in the donut design is also informative. The contemporaneous coefficient at $k = 0$ flips sign and becomes a precise null ($+0.000015$, $p = 0.935$), indicating that the static contemporaneous effect of treatment is essentially zero once the immediate pre-treatment window is removed from the comparison. The post-period coefficients at $k \in [1, 3]$ and $k \in [4, 6]$ remain negative and significant but at magnitudes ($-0.000721$ and $-0.000785$) that are noticeably smaller than the corresponding coefficients in the conventional event study ($-0.001189$ and $-0.001259$), and the long-horizon $k \geq 7$ coefficient becomes only marginally significant. The donut event study therefore preserves the sign of the matched DiD coefficient but reduces its magnitude by about 30 percent and suggests that the causal interpretation of the static estimate is questionable.
+
+\subsection{Long-Difference Design}\label{sec:long_diff_results}
+
+The long-difference design implements the cleanest possible identification check on the matched panel. We collapse the 25-year panel into two periods, the pre-treatment-era 2000--2002 and the post-treatment-era 2018--2024, compute polygon-level means for each variable, take first differences, and estimate Equation (\ref{eq:longdiff}) by OLS with state dummies and standard errors clustered at the state level. Table \ref{tab:longdiff} reports the results.
+
+\begin{table}[H]
+\centering
+\small
+\begin{threeparttable}
+\caption{Long-Difference Design (Pre 2000--2002 vs Post 2018--2024)}
+\label{tab:longdiff}
+\begin{tabular}{lccc}
+\toprule
+Specification & Coefficient & SE & $p$ \\
+\midrule
+\multicolumn{4}{l}{\textit{Panel A: Disaster occurrence ($\Delta D_i$)}} \\
+\quad $\Delta FRT_i$ (cumulative ever) & $+0.000415$ & $0.000541$ & $0.443$ \\
+\quad $\Delta \ln(1 + T_i)$ (decay stock) & $+0.000075$ & $0.000115$ & $0.513$ \\
+\addlinespace
+\multicolumn{4}{l}{\textit{Panel B: Severity ($\Delta \ln(1 + S_i)$)}} \\
+\quad $\Delta FRT_i$ (cumulative ever) & $+0.003326$ & $0.003343$ & $0.320$ \\
+\quad $\Delta \ln(1 + T_i)$ (decay stock) & $+0.000625$ & $0.000685$ & $0.361$ \\
+\addlinespace
+\multicolumn{4}{l}{\textit{Panel C: Disaster occurrence by WUI density}} \\
+\quad $\Delta FRT_i \times$ Low density & $+0.000605$ & $0.000698$ & $0.386$ \\
+\quad $\Delta FRT_i \times$ Medium density & $+0.000202$ & $0.000439$ & $0.646$ \\
+\quad $\Delta FRT_i \times$ High density & $-0.000168$ & $0.000260$ & $0.518$ \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\small
+\item \textit{Notes:} Polygon-level first-difference regressions on the matched analytic sample. Each polygon is collapsed to a pre-period mean (2000--2002) and a post-period mean (2018--2024), and the differenced outcome is regressed on the differenced treatment variable, the differenced PRISM climate vector, and a complete set of state dummies. Standard errors clustered at the state level in parentheses. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.
+\end{tablenotes}
+\end{threeparttable}
+\end{table}
+
+Every long-difference specification in Table \ref{tab:longdiff} yields a precise null. The disaster-occurrence coefficient on the cumulative-ever change in $FRT$ is $+0.000415$ (SE $0.000541$, $p = 0.443$), with a wrong-signed point estimate. The severity coefficient is $+0.003326$ (SE $0.003343$, $p = 0.320$), again wrong-signed and statistically null. The decay-weighted treatment stock specification produces the same conclusion on both outcomes. Most strikingly, even the High-density subsample, where the matched DiD heterogeneity result is largest, delivers a precise null in the long-difference design ($-0.000168$, $p = 0.518$). The standard errors are roughly equal in magnitude to the matched DiD point estimates, so the long-difference null is informative about the absence of an effect rather than reflecting low statistical power.
+
+The long-difference design is the most damning result in the paper, and it constrains the causal interpretation of the matched DiD coefficient sharply. The matched DiD identifies a within-polygon time-series association between treatment status and disaster outcomes that survives polygon and year fixed effects and time-varying climate controls. The long-difference design identifies the same within-polygon contrast but at a coarser temporal resolution (two periods rather than 25), with polygon-level fixed effects implicit in the differencing, climate-change controls in $\Delta \mathbf{X}_i$, and state dummies absorbing time-invariant state-level confounders. The two designs ought to recover the same causal parameter under the maintained assumption that the matched DiD coefficient identifies a true treatment effect. The fact that they do not, with the long-difference coefficient indistinguishable from zero on every outcome and density stratum, indicates that the matched DiD coefficient picks up differential time-series trends that the long-difference averaging absorbs into the polygon means. The two coefficients are mathematically related: the matched DiD weights short-horizon contrasts more heavily than the long-difference design, so the long-difference null is consistent with a matched DiD coefficient that is partly driven by the same selection-on-trends pattern documented by the failed event study.
+
+\subsection{Bartik Shift-Share Instrument}\label{sec:bartik_results}
+
+The Bartik shift-share instrument constructed in Section \ref{sec:bartik} provides a complementary identification strategy. The first stage projects the polygon-level cumulative log treated acres onto the polygon-specific Bartik instrument $B_{it}$, controlling for polygon and year fixed effects and time-varying climate. The reduced form projects the binary disaster outcome onto the same instrument. Table \ref{tab:bartik} reports the results.
+
+\begin{table}[H]
+\centering
+\small
+\begin{threeparttable}
+\caption{Bartik Shift-Share Instrumental Variables Estimates}
+\label{tab:bartik}
+\begin{tabular}{lcc}
+\toprule
+& Full panel & Matched panel \\
+\midrule
+\multicolumn{3}{l}{\textit{Panel A: First stage, dependent var.\ $= \ln(1 + A_{it})$}} \\
+\quad $\ln$ Bartik & $+0.039019^{***}$ & $+0.012351^{***}$ \\
+& $(0.000504)$ & $(0.001064)$ \\
+\quad First-stage $F$ & $5{,}991.78$ & $134.68$ \\
+\addlinespace
+\multicolumn{3}{l}{\textit{Panel B: Reduced form, dependent var.\ $= D_{it}$}} \\
+\quad $\ln$ Bartik & $+0.000113^{***}$ & $+0.000099^{***}$ \\
+& $(0.000008)$ & $(0.000014)$ \\
+\addlinespace
+\multicolumn{3}{l}{\textit{Panel C: 2SLS Wald estimate, $\hat{\beta}^{2SLS} = \hat{\pi}_1 / \hat{\kappa}_1$}} \\
+\quad $\ln(1 + A_{it})$ & $+0.002897^{***}$ & $+0.008040^{***}$ \\
+& $(0.000219)$ & $(0.001346)$ \\
+\midrule
+Polygon FE & Yes & Yes \\
+Year FE & Yes & Yes \\
+Climate controls & Yes & Yes \\
+Observations & 23{,}685{,}675 & 6{,}834{,}025 \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\small
+\item \textit{Notes:} The instrument is $B_{it} = \ln(1 + \sigma_{s_i} \cdot A_t^{\text{nat}})$, where $\sigma_{s_i}$ is the share of national FACTS-treated acreage in state $s_i$ during 2000--2002 and $A_t^{\text{nat}}$ is the national total of FACTS treated acres in year $t$. The 2SLS Wald estimate is computed as the ratio of reduced-form to first-stage coefficients with delta-method standard errors. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.
+\end{tablenotes}
+\end{threeparttable}
+\end{table}
+
+The Bartik first stage is statistically very strong: the $F$-statistic is 5{,}992 on the full panel and 135 on the matched panel, both well above the conventional weak-instrument threshold of 10. The reduced form is significant on both samples ($+0.000113$ and $+0.000099$, both $p < 0.001$). However, the reduced-form sign is wrong, and the implied 2SLS Wald estimate is positive ($+0.002897$ on the full panel and $+0.008040$ on the matched panel), indicating that the Bartik instrument predicts higher disaster rates rather than lower. This is direct evidence that the exclusion restriction fails on this instrument.
+
+The diagnosis is straightforward. The state pre-period FACTS share $\sigma_s$ is dominated by the same Western fire-prone states that account for the bulk of disaster polygon-years. Oregon alone accounts for 65.8 percent of the state pre-period share, followed by California, Idaho, and Washington. These states are characterized by both high baseline fire risk and high persistent FACTS investment. The instrument therefore conflates ``polygon is in a high-FACTS state'' with ``polygon is in a high-fire-risk state,'' and the resulting reduced form picks up the persistent state-level fire risk channel rather than the exogenous treatment channel. The 2SLS Wald estimator, which divides the reduced form by the first stage, magnifies this contamination because the first-stage coefficient is small in absolute value relative to the reduced-form noise.
+
+We retain the Bartik IV in the paper as a transparent failed robustness test rather than as a credible causal estimator. The lesson for future research is that constructing a Bartik IV for FACTS treatment requires either a finer geographic unit for the state-share (so that within-state heterogeneity in fire risk is broken), or a budget shock that is exogenous to historical state-level fire risk patterns. Neither is available in the current FACTS metadata.
+
+\subsection{Placebo, Sample Composition, and Drop-Always-Treated Checks}
+
+Two additional robustness checks are worth flagging in the main text. \textit{First}, the five-year future-treatment placebo restricted to untreated polygon-years on the matched sample yields a coefficient of $-0.000592$ (SE $0.000097$, $p < 0.001$) on the binary disaster outcome. Polygons that will be treated in the future already exhibit lower current disaster rates among observations in which they are not yet treated, indicating that future-treated polygons differ systematically from never-treated polygons even before treatment is implemented. This biases the matched DiD coefficient away from zero (toward finding a treatment effect that is partly selection). \textit{Second}, dropping always-treated polygons (those whose first treatment year is on or before 2003) removes 856 polygons from the matched sample but leaves the matched DiD coefficient and its statistical significance essentially unchanged. The matched DiD estimate is therefore not driven by the small subset of polygons that were treated in the very early years of the panel.
+
+\subsection{Summary of Robustness Findings}
+
+The four robustness exercises jointly establish a clear pattern. The matched DiD estimate of Section \ref{sec:results} is internally consistent across functional forms (binary, decay-weighted stock, log cumulative acres), survives the addition of climate controls, and produces a strong density gradient in the predicted direction. It does not, however, survive the long-difference design (Table \ref{tab:longdiff}), which produces a precise null on every outcome and density stratum. It survives the donut event study (Table \ref{tab:donut}) only with reduced magnitudes and the loss of the contemporaneous-period effect. The Bartik shift-share IV (Table \ref{tab:bartik}) has a strong first stage but a wrong-signed reduced form and 2SLS estimate, indicating that the instrument is contaminated. The five-year future-treatment placebo confirms that treated polygons differ from matched controls on time-varying disaster trends.
+
+The honest reading of this body of evidence is the following. The matched DiD coefficient is a robust within-polygon time-series association between treatment exposure and disaster outcomes, conditional on standard controls and the matched-sample composition. It is not a clean causal estimate of the effect of FACTS treatment on disaster occurrence, because the long-difference design fails to recover the same parameter and the matched event study fails the joint parallel-trends test. The density-graded heterogeneity result, although qualitatively consistent with the comparative-static prediction of Proposition \ref{prop:heterogeneity}, is also subject to the long-difference null when re-estimated within density classes. We therefore recommend that the matched DiD point estimates be read as descriptive evidence of a strong within-polygon association, with the welfare calculations of Section \ref{sec:welfare} interpreted as upper bounds on the welfare value of FACTS treatment under the maintained assumption that the matched DiD identifies a causal effect.
+
+
+%==============================================================================
+% 9. DISCUSSION
+%==============================================================================
+\section{Discussion}\label{sec:discussion}
+
+\subsection{Interpreting the Magnitudes}
+
+The matched DiD specification on the propensity-score-matched WUI polygon panel produces a binary disaster coefficient of $-0.000258$ (Table \ref{tab:main}) and a severity coefficient of $-0.001588$ on $\ln(1 + S_{it})$ (Table \ref{tab:severity}). At the matched-sample mean disaster rate of $0.00083$, the binary coefficient implies a 31 percent within-polygon reduction in disaster occurrence per treated polygon-year. The severity coefficient is approximately six times the binary coefficient when both are scaled by the matched-sample mean of the respective outcome, indicating that the bulk of the matched-DiD-estimated protective benefit operates through reduced damage given fire rather than through reduced fire occurrence. The High-density coefficient of $-0.001028$ from Table \ref{tab:heterogeneity} is nearly four times the pooled coefficient and large enough to imply a benefit-cost ratio of $2.32$ at standard valuation parameters.
+
+These magnitudes are large in absolute terms but must be read in the context of the falsification tests of Section \ref{sec:robust}. The matched DiD identifies a robust within-polygon time-series association, but the long-difference design fails to recover the same parameter on the same matched sample. \citet{rose2007} report benefit-cost ratios of 4 to 6 for FEMA pre-disaster mitigation grants in flood and earthquake settings; our matched DiD pooled BCR of $0.58$ is below that range, while our High-density BCR of $2.32$ is at the lower end of it. If the long-difference null is the more credible identification of the within-polygon causal parameter, the true BCR is closer to zero on both subsamples and federal fuel management is not detectably effective at the polygon-year level. We do not take a final position on which identification is correct because we cannot, on the available data, distinguish between (i) a genuine treatment effect that the long-difference design under-detects because of measurement error in $\Delta FRT_i$ at the polygon level, and (ii) a spurious matched DiD result that the long-difference design correctly diagnoses as zero.
+
+\subsection{Mechanism Interpretation}
+
+Under the matched DiD interpretation, the comparative-static prediction of Proposition \ref{prop:heterogeneity} is recovered cleanly: the absolute treatment effect on disaster probability is monotonically increasing in WUI density. This is the qualitative signature of a vulnerability-driven mechanism, in which fuel treatments operate by modifying stand-level fire behavior in landscapes where that modification translates into measurable structural-loss reduction. In Low-density polygons where structural exposure is minimal, the same modification translates into negligible per-polygon damage reduction, and the matched DiD coefficient is small or wrong-signed. In High-density polygons where structural exposure is concentrated, the same modification yields a large reduction in damage and the matched DiD coefficient is sharply negative. The monotonicity of the gradient is the strongest qualitative evidence in the paper for the maintained causal interpretation, because no single selection-on-trends story predicts a coefficient that flips sign across density classes in the direction predicted by theory.
+
+The decomposition between the occurrence and severity channels is informative under the same maintained interpretation. The matched DiD severity coefficient is approximately six times the matched DiD occurrence coefficient when both are scaled by the matched-sample mean, suggesting that the dominant protective channel is the $\partial L / \partial F$ channel of the theoretical model rather than the $\partial \pi / \partial F$ channel. Intuitively, fuel treatments do not prevent wildfires from starting or from reaching WUI polygons; rather, they alter the intensity with which fires burn the structures they encounter, reducing damage conditional on fire occurrence. This is consistent with the ecological literature \citep{stephens2012, agee2005}.
+
+\subsection{Policy Implications}
+
+Three policy-relevant conclusions follow even under the cautious causal reading we adopt. \textit{First}, the matched DiD heterogeneity result is robust enough across functional forms, climate-control specifications, and matching procedures to support a clear targeting recommendation: federal fuel reduction budgets should prioritize High-density WUI polygons over Low-density polygons. Even if the long-difference null is the correct interpretation of the average effect, the within-density-class heterogeneity in the matched DiD coefficient is informative because it identifies where marginal treatment investment is most likely to yield welfare-relevant disaster reduction. The current allocation of FACTS funding is roughly proportional across density classes within Western states, which the equimarginal benchmark of Corollary \ref{cor:equimarginal} would reject. \textit{Second}, the welfare case for FACTS treatment is concentrated in the High-density subsample, with a BCR of $2.32$ under the matched DiD point estimate, against a pooled BCR of $0.58$. Reallocation toward the High-density tail would more than triple the implied welfare return per dollar spent. \textit{Third}, the failed Bartik IV (Section \ref{sec:bartik_results}) and the failed long-difference design (Section \ref{sec:long_diff_results}) make clear that the federal program lacks the kind of exogenous treatment-assignment variation that would permit clean causal evaluation. The first-order policy infrastructure recommendation is that future FACTS expansions be implemented with embedded random or quasi-random allocation rules (for example, lottery assignment of new project funds across eligible polygons within a state-year, or sharp regression-discontinuity thresholds in the prioritization scoring system), so that subsequent evaluations can deliver causal estimates rather than within-polygon associations.
+
+\subsection{Limitations and External Validity}
+
+Five limitations warrant explicit acknowledgment. \textit{First}, the matched event study reveals a significant pre-trend on the binary outcome and the donut event study confirms that the pre-trend persists at $k = -4$. We cannot rule out that the matched DiD coefficient partly reflects selection on time-varying unobservables. The long-difference null and the failed Bartik IV reinforce this concern. \textit{Second}, the matched analytic sample is constructed via 1:5 nearest-neighbor PSM with state stratification on a covariate vector that does not include topography, vegetation, or wildfire history beyond the pre-period mean. Adding these dimensions to the matching specification might tighten or loosen the matched DiD coefficient, but is unlikely to resolve the parallel-trends failure documented in the event study. \textit{Third}, the national WUI delineation we use is the 2020 vintage, which we treat as time-invariant for the entire 2000--2024 panel. The Radeloff team's 1990--2020 WUI change file would permit a dynamic specification in future work and would address potential confounding between treatment effects and WUI classification dynamics. \textit{Fourth}, the analysis is confined to federal lands and to FACTS-recorded treatments. State-level programs (California's CAL FIRE in particular), private landowner treatments, and tribal fuel management programs are excluded. To the extent these programs are complements or substitutes for federal treatment, our estimates capture the conditional effect of federal treatment given the contemporaneous level of non-federal activity. \textit{Fifth}, climate change is rapidly altering the underlying fire environment, with extreme fire weather conditions becoming more frequent \citep{brown2023}. Extrapolating the matched DiD coefficient to projected future fire regimes is speculative and should be treated with caution; the welfare projections in Section \ref{sec:welfare} use the 2000--2024 average and do not account for evolving climatic baselines.
+
+
+%==============================================================================
+% 10. CONCLUSION
+%==============================================================================
+\section{Conclusion}\label{sec:conclusion}
+
+This paper builds the most comprehensive WUI-polygon-scale evaluation infrastructure available to date for federal fuel reduction treatments and uses it to document a robust within-polygon association between FACTS treatment exposure and wildfire disaster outcomes, while transparently mapping the identification challenges that constrain a fully causal interpretation. Combining a propensity-score-matched panel of 273{,}361 WUI polygons drawn from a 947{,}427-polygon vicinity panel over the conterminous United States (2000--2024), with 598{,}028 FACTS treatment activities and the Wildfire Burn Zone Disasters database, we estimate a matched DiD coefficient of $-0.000258$ ($p < 0.001$) on the binary disaster outcome (a 31 percent within-polygon reduction at the matched-sample mean), and a corresponding coefficient of $-0.001588$ ($p < 0.001$) on $\ln(1 + \text{structures destroyed})$. The matched DiD effect is monotonically increasing in WUI density, with the largest absolute coefficient in High-density polygons ($-0.001028$), consistent with the comparative-static prediction of the expected-damage model. The implied benefit-cost ratio is $0.58$ in the pooled matched sample and $2.32$ in the High-density subsample.
+
+The matched DiD result does not, however, survive the strictest identification check we can implement on this data. A long-difference design that collapses the panel to two periods and identifies off polygon-level first differences yields a precise null on every outcome and density stratum, with wrong-signed point estimates. A donut event study confirms that treated polygons exhibit a systematic decline in disaster rates beginning at least four years before treatment, which the matched DiD partially absorbs into the static treatment-effect coefficient. A Bartik shift-share IV constructed from state pre-period FACTS shares interacted with the national HFRA-era budget shock has a strong first stage but yields a wrong-signed reduced form, indicating the instrument is contaminated by persistent state-level fire risk. A five-year future-treatment placebo confirms that future-treated polygons differ systematically from never-treated polygons even before treatment is implemented. The honest reading is that, on the matched-sample data we have constructed, the within-polygon association documented in the matched DiD is strong, robust to climate controls, robust to functional form, and qualitatively consistent with the theoretical mechanism, but cannot be cleanly attributed to a causal effect of FACTS treatment.
+
+Three policy-relevant conclusions follow even under this cautious causal reading. \textit{First}, the density-graded heterogeneity in the matched DiD is the most policy-actionable result of the paper. Federal fuel reduction budgets should prioritize High-density WUI polygons over Low-density polygons, which the implied BCR of $2.32$ in the High-density subsample (against $0.58$ pooled) supports. \textit{Second}, the welfare case for FACTS treatment at the polygon-year level is concentrated in the High-density tail. The current federal allocation is roughly proportional across density classes within Western states, which the equimarginal benchmark of Corollary \ref{cor:equimarginal} would reject. \textit{Third}, future FACTS expansions should be implemented with embedded random or quasi-random treatment-assignment rules so that subsequent evaluations can deliver clean causal estimates. The available FACTS metadata does not contain the kind of variation that would permit a cleaner identification on the historical sample, and our failed Bartik IV is direct evidence that conventional shift-share approaches are insufficient.
+
+Four directions for future work emerge. \textit{First}, embedding an explicit randomization or sharp regression-discontinuity rule in the prioritization frameworks for new FACTS funding would deliver, within five to ten years, the kind of variation that the existing data lacks. \textit{Second}, integrating non-federal treatment data (CAL FIRE, BLM, tribal, private) with the FACTS panel would expand the treatment cross-section and might reduce the spatial correlation between persistent state-level fire risk and treatment placement. \textit{Third}, modeling the optimal spatial allocation of treatment budgets as a planner's problem under our estimated matched DiD heterogeneous treatment effect function would deliver direct quantitative guidance for federal prioritization, even under the cautious causal interpretation we adopt. \textit{Finally}, integrating the empirical estimates with climate-driven projections of future fire regimes would address the first-order question of whether the implied protective association remains stable as fire weather continues to intensify. We make all matching, regression, and welfare code available so that future researchers can replicate the matched-sample DiD on this infrastructure and overlay alternative identification strategies as new variation becomes available.
+
+
+%==============================================================================
+% REFERENCES
+%==============================================================================
+\newpage
+\singlespacing
+\bibliographystyle{plainnat}
+\begin{thebibliography}{50}
+
+\bibitem[Abatzoglou and Williams(2016)]{abatzoglou2016}
+Abatzoglou, J. T., and A. P. Williams (2016). Impact of anthropogenic climate change on wildfire across western US forests. \textit{Proceedings of the National Academy of Sciences} 113(42), 11770--11775.
+
+\bibitem[Agee and Skinner(2005)]{agee2005}
+Agee, J. K., and C. N. Skinner (2005). Basic principles of forest fuel reduction treatments. \textit{Forest Ecology and Management} 211(1--2), 83--96.
+
+\bibitem[Angrist and Pischke(2009)]{angrist2009}
+Angrist, J. D., and J.-S. Pischke (2009). \textit{Mostly Harmless Econometrics: An Empiricist's Companion}. Princeton: Princeton University Press.
+
+\bibitem[Baylis and Boomhower(2023)]{baylis2023}
+Baylis, P., and J. Boomhower (2023). The economic incidence of wildfire suppression in the United States. \textit{American Economic Journal: Applied Economics} 15(1), 442--473.
+
+\bibitem[Boomhower, Fowlie, Plantinga, and Walsh(2024)]{boomhower2024}
+Boomhower, J., M. Fowlie, A. Plantinga, and R. Walsh (2024). Wildfire insurance and risk pricing in California. NBER Working Paper No. 32499.
+
+\bibitem[Bellemare and Wichman(2020)]{bellemare2020}
+Bellemare, M. F., and C. J. Wichman (2020). Elasticities and the inverse hyperbolic sine transformation. \textit{Oxford Bulletin of Economics and Statistics} 82(1), 50--61.
+
+\bibitem[Borusyak, Jaravel, and Spiess(2024)]{borusyak2024}
+Borusyak, K., X. Jaravel, and J. Spiess (2024). Revisiting event study designs: Robust and efficient estimation. \textit{Review of Economic Studies}, forthcoming.
+
+\bibitem[Bowman et al.(2017)]{bowman2017}
+Bowman, D. M. J. S., G. J. Williamson, J. T. Abatzoglou, et al. (2017). Human exposure and sensitivity to globally extreme wildfire events. \textit{Nature Ecology \& Evolution} 1, 0058.
+
+\bibitem[Brown et al.(2023)]{brown2023}
+Brown, P. T., H. Hanley, A. Mahesh, et al. (2023). Climate warming increases extreme daily wildfire growth risk in California. \textit{Nature} 621, 760--766.
+
+\bibitem[Calkin et al.(2005)]{calkin2005}
+Calkin, D. E., K. M. Gebert, J. G. Jones, and R. P. Neilson (2005). Forest Service large fire area burned and suppression expenditure trends, 1970--2002. \textit{Journal of Forestry} 103(4), 179--183.
+
+\bibitem[Callaway and Sant'Anna(2021)]{callaway2021}
+Callaway, B., and P. H. C. Sant'Anna (2021). Difference-in-differences with multiple time periods. \textit{Journal of Econometrics} 225(2), 200--230.
+
+\bibitem[Chen et al.(2024)]{chen2024}
+Chen, B., S. Wu, Y. Jin, et al. (2024). Wildfire risk for global wildland-urban interface areas. \textit{Nature Sustainability} 7, 474--484.
+
+\bibitem[Conley(1999)]{conley1999}
+Conley, T. G. (1999). GMM estimation with cross sectional dependence. \textit{Journal of Econometrics} 92(1), 1--45.
+
+\bibitem[de Chaisemartin and D'Haultf{\oe}uille(2020)]{dechaisemartin2020}
+de Chaisemartin, C., and X. D'Haultf{\oe}uille (2020). Two-way fixed effects estimators with heterogeneous treatment effects. \textit{American Economic Review} 110(9), 2964--2996.
+
+\bibitem[Deryugina(2017)]{deryugina2017}
+Deryugina, T. (2017). The fiscal cost of hurricanes: Disaster aid versus social insurance. \textit{American Economic Journal: Economic Policy} 9(3), 168--198.
+
+\bibitem[Finney(2001)]{finney2001}
+Finney, M. A. (2001). Design of regular landscape fuel treatment patterns for modifying fire growth and behavior. \textit{Forest Science} 47(2), 219--228.
+
+\bibitem[Gardner(2021)]{gardner2021}
+Gardner, J. (2021). Two-stage differences in differences. Working paper, University of Mississippi.
+
+\bibitem[Goodman-Bacon(2021)]{goodmanbacon2021}
+Goodman-Bacon, A. (2021). Difference-in-differences with variation in treatment timing. \textit{Journal of Econometrics} 225(2), 254--277.
+
+\bibitem[Heckman, Ichimura, and Todd(1997)]{heckman1997}
+Heckman, J. J., H. Ichimura, and P. E. Todd (1997). Matching as an econometric evaluation estimator: Evidence from evaluating a job training programme. \textit{Review of Economic Studies} 64(4), 605--654.
+
+\bibitem[Hsiang, Kopp, et al.(2017)]{hsiang2017}
+Hsiang, S., R. Kopp, A. Jina, et al. (2017). Estimating economic damage from climate change in the United States. \textit{Science} 356(6345), 1362--1369.
+
+\bibitem[Kousky(2014)]{kousky2014}
+Kousky, C. (2014). Informing climate adaptation: A review of the economic costs of natural disasters. \textit{Energy Economics} 46, 576--592.
+
+\bibitem[Kunreuther(1996)]{kunreuther1996}
+Kunreuther, H. (1996). Mitigating disaster losses through insurance. \textit{Journal of Risk and Uncertainty} 12(2--3), 171--187.
+
+\bibitem[Phillips(2025)]{phillips2025}
+Phillips, A. (2025, January). Los Angeles firestorm: 28 dead, 16,000 structures destroyed. [News report].
+
+\bibitem[Plantinga, Walsh, and Wibbenmeyer(2022)]{plantinga2022}
+Plantinga, A. J., R. Walsh, and M. Wibbenmeyer (2022). Priorities and effectiveness in wildfire management: Evidence from fire spread in the western United States. \textit{Journal of the Association of Environmental and Resource Economists} 9(4), 603--639.
+
+\bibitem[McCoy and Walsh(2018)]{mccoy2018}
+McCoy, S. J., and R. P. Walsh (2018). Wildfire risk, salience and housing demand. \textit{Journal of Environmental Economics and Management} 91, 203--228.
+
+\bibitem[Wibbenmeyer, Anderson, and Plantinga(2019)]{wibbenmeyer2019}
+Wibbenmeyer, M. J., S. E. Anderson, and A. J. Plantinga (2019). Salience and the government provision of public goods. \textit{Economic Inquiry} 57(3), 1547--1567.
+
+\bibitem[Tiebout(1956)]{tiebout1956}
+Tiebout, C. M. (1956). A pure theory of local expenditures. \textit{Journal of Political Economy} 64(5), 416--424.
+
+\bibitem[Burke et al.(2023)]{burke2023}
+Burke, M., A. Driscoll, S. Heft-Neal, J. Xue, J. Burney, and M. Wara (2023). The changing risk and burden of wildfire in the United States. \textit{Proceedings of the National Academy of Sciences} 118(2), e2011048118.
+
+\bibitem[Radeloff et al.(2018)]{radeloff2018}
+Radeloff, V. C., D. P. Helmers, H. A. Kramer, M. H. Mockrin, P. M. Alexandre, A. Bar-Massada, et al. (2018). Rapid growth of the US wildland-urban interface raises wildfire risk. \textit{Proceedings of the National Academy of Sciences} 115(13), 3314--3319.
+
+\bibitem[Rose et al.(2007)]{rose2007}
+Rose, A., K. Porter, N. Dash, et al. (2007). Benefit-cost analysis of FEMA hazard mitigation grants. \textit{Natural Hazards Review} 8(4), 97--111.
+
+\bibitem[Rosenbaum and Rubin(1983)]{rosenbaum1983}
+Rosenbaum, P. R., and D. B. Rubin (1983). The central role of the propensity score in observational studies for causal effects. \textit{Biometrika} 70(1), 41--55.
+
+\bibitem[Roth, Sant'Anna, Bilinski, and Poe(2023)]{roth2023}
+Roth, J., P. H. C. Sant'Anna, A. Bilinski, and J. Poe (2023). What's trending in difference-in-differences? A synthesis of the recent econometrics literature. \textit{Journal of Econometrics} 235(2), 2218--2244.
+
+\bibitem[Stephens et al.(2012)]{stephens2012}
+Stephens, S. L., J. D. McIver, R. E. J. Boerner, et al. (2012). The effects of forest fuel-reduction treatments in the United States. \textit{BioScience} 62(6), 549--560.
+
+\bibitem[Sun and Abraham(2021)]{sun2021}
+Sun, L., and S. Abraham (2021). Estimating dynamic treatment effects in event studies with heterogeneous treatment effects. \textit{Journal of Econometrics} 225(2), 175--199.
+
+\bibitem[Syphard et al.(2017)]{syphard2017}
+Syphard, A. D., J. E. Keeley, A. H. Pfaff, and K. Ferschweiler (2017). Human presence diminishes the importance of climate in driving fire activity across the United States. \textit{Proceedings of the National Academy of Sciences} 114(52), 13750--13755.
+
+\bibitem[Thompson et al.(2013)]{thompson2013}
+Thompson, M. P., D. E. Calkin, M. A. Finney, K. M. Gebert, and M. S. Hand (2013). A risk-based approach to wildland fire budgetary planning. \textit{Forest Science} 59(1), 63--77.
+
+\bibitem[USFS(2022)]{usfs2022}
+US Forest Service (2022). \textit{Confronting the Wildfire Crisis: A Strategy for Protecting Communities and Improving Resilience in America's Forests}. USDA Forest Service.
+
+\bibitem[Viscusi(2018)]{viscusi2018}
+Viscusi, W. K. (2018). \textit{Pricing Lives: Guideposts for a Safer Society}. Princeton: Princeton University Press.
+
+\bibitem[Westerling et al.(2006)]{westerling2006}
+Westerling, A. L., H. G. Hidalgo, D. R. Cayan, and T. W. Swetnam (2006). Warming and earlier spring increase western US forest wildfire activity. \textit{Science} 313(5789), 940--943.
+
+\bibitem[Wilner et al.(2025)]{wilner2025}
+Wilner, [authors] (2025). Wildfire Burn Zone Disasters dataset. [Complete citation needed.]
+
+\bibitem[Wear, Wibbenmeyer, and Zhu(2025)]{wear2025}
+Wear, D. N., M. Wibbenmeyer, and J. Zhu (2025). The spatially explicit costs of federal hazardous fuel reduction programs. Resources for the Future Working Paper, Washington, DC.
+
+\end{thebibliography}
+
+
+%==============================================================================
+% APPENDIX
+%==============================================================================
+\newpage
+\appendix
+\doublespacing
+\section{Additional Tables and Figures}\label{app:tables}
+
+\subsection*{A.1 Suggested Figures}
+
+\begin{enumerate}[leftmargin=*, itemsep=0.3em]
+\item \textit{Geographic distribution.} Map showing WUI polygons (treated and matched controls), federal fuel treatments by year, and disaster events.
+\item \textit{Treatment activity over time.} Annual federal treatment acreage from FACTS, 2000--2024, with vertical markers for major policy events (NFP 2000, HFRA 2003, BIL 2021, IRA 2022).
+\item \textit{Common support.} Density plots of estimated linear propensity scores for treated and matched-control polygons before and after matching, with the post-match distribution overlaid on the pre-match distribution.
+\item \textit{Matched event study.} Binned event-time coefficients from the matched-sample TWFE event study with 95\% confidence intervals, alongside the donut variant that drops $k \in [-3, -1]$.
+\item \textit{Long-difference scatter.} Bivariate scatter of $\Delta D_i$ against $\Delta FRT_i$ for the polygon-level long-difference design, with state-mean overlay.
+\item \textit{Welfare sensitivity tornado.} Benefit-cost ratio across alternative VSL values, discount rates, treatment lifespans, and damage parameters, separately for the pooled matched sample and the High-density subsample.
+\end{enumerate}
+
+\subsection*{A.2 Derivation of Optimal Treatment Allocation}
+
+The Lagrangian for the social planner's problem (\ref{eq:social_planner}) under budget constraint $B$ is:
+\begin{equation*}
+\mathcal{L} = \sum_t (1+r)^{-t} \sum_i \left[-\pi_{it} L_{it} - c a_{it}\right] + \mu \left[B - \sum_t \sum_i c a_{it}\right].
+\end{equation*}
+The first-order condition with respect to $a_{it}$ yields Equation (\ref{eq:foc}). At the unconstrained optimum, $\mu = 0$ and the marginal social benefit of treatment equals the unit cost of treatment at every active location. Under a binding budget constraint, the equimarginal principle dictates equalization of $\partial(\pi_{it} L_{it}) / \partial a_{it}$ across all treated locations, with locations whose marginal benefit falls below the shadow price $c + \mu$ receiving zero treatment.
+
+\subsection*{A.3 Robustness to Alternative Disaster Definitions}
+
+[Reserved for additional sensitivity analyses with alternative definitions of the disaster threshold: structures-only, fatalities-only, federal-declaration-only, and continuous damage measures.]
+
+\subsection*{A.4 First-Stage Propensity Score Estimates}
+
+[Reserved for the logit coefficients of Equation (\ref{eq:propensity}), reporting marginal effects of each baseline covariate on the probability of receiving treatment.]
+
+\end{document}

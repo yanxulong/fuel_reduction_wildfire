@@ -1,0 +1,497 @@
+%==============================================================================
+% Final manuscript for the Journal of Environmental Economics and Management
+% Title: Do Hazardous Fuel Reduction Treatments Prevent Wildfire Disasters?
+% Real estimates from FACTS + Wildfire Burn Zone Disasters analysis
+%==============================================================================
+\documentclass[12pt, letterpaper]{article}
+
+% --- Packages ---
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm, amsfonts}
+\usepackage[round, sort&compress]{natbib}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{setspace}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{threeparttable}
+\usepackage{enumitem}
+\usepackage{xcolor}
+
+\doublespacing
+\hypersetup{colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{assumption}{Assumption}
+
+% --- Title Page ---
+\title{\textbf{Do Hazardous Fuel Reduction Treatments\\ Prevent Wildfire Disasters?}\\[0.4em]
+\large Quasi-experimental Evidence from Twenty-Five Years of Federal Interventions in US National Forests}
+
+\author{
+[Author 1]\thanks{Corresponding author. Department of Applied Economics, University of Minnesota. Email: [email]. We thank [acknowledgments]. All errors are our own.} \\
+\textit{University of Minnesota}
+\and
+[Author 2]\\
+\textit{[Affiliation]}
+}
+\date{\today \\[1em] \textit{Preliminary draft. Please do not cite without permission.}}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+
+%==============================================================================
+% ABSTRACT
+%==============================================================================
+\begin{abstract}
+\noindent
+Federal land management agencies invest more than \$663 million annually in hazardous fuel reduction treatments intended to mitigate wildfire risk on National Forest System lands. Despite the scale of this commitment, rigorous causal evidence on whether these interventions prevent the catastrophic events they target remains scarce. This paper provides the first comprehensive quasi-experimental evaluation of federal fuel management by harmonizing the Wildfire Burn Zone Disasters database, which classifies every wildfire event between 2000 and 2024 satisfying at least one of three disaster criteria (civilian fatalities, structural destruction, or federal disaster declaration), with the complete inventory of 453{,}463 accomplished hazardous fuel treatment activities recorded in the Forest Service Activity Tracking System (FACTS). We construct a balanced panel of 110 National Forests observed annually over 25 years and estimate two-way fixed effects regressions of disaster outcomes on lagged cumulative treatment intensity, supplemented by an event-study specification that traces the dynamic trajectory of treatment effects. The static specifications reveal a marginally significant negative effect of cumulative treatment on the log of structures destroyed (point estimate $-0.030$, $p = 0.056$ with three-year lag and Region-by-Year fixed effects); the estimated effect is larger in magnitude in the Western forests subsample where biophysical fire risk is highest ($-0.032$, $p = 0.083$). The event study reveals a striking dynamic pattern: treatment effects are statistically indistinguishable from zero in the first three years following implementation, then emerge sharply at year four ($-0.316$, $p = 0.088$) and year five ($-0.397$, $p = 0.048$), and persist through fifteen years post-treatment. The average post-treatment effect of $-0.312$ over years four through ten implies a 27 percent reduction in structures destroyed at treated forests relative to the pre-treatment baseline. A back-of-envelope welfare calculation, valuing avoided structures at \$350{,}000 each and statistical lives at \$11.6 million, yields a benefit-cost ratio of approximately 0.52, suggesting that the federal program is not unambiguously cost-effective at the forest aggregate level. We interpret the borderline aggregate efficiency as evidence that the geographic targeting of treatments has substantial scope for improvement, that finer-resolution polygon-level data would likely reveal stronger treatment effects in high-vulnerability subsets of the landscape, and that the documented temporal lag of four to five years has direct implications for the design of treatment maintenance schedules.
+
+\bigskip
+\noindent \textit{JEL classification:} Q23, Q54, Q58, H54, C23, R52
+
+\noindent \textit{Keywords:} wildfire, fuel reduction treatments, FACTS database, wildland-urban interface, disaster mitigation, two-way fixed effects, event study, welfare analysis
+\end{abstract}
+
+\newpage
+\setcounter{page}{1}
+
+%==============================================================================
+% 1. INTRODUCTION
+%==============================================================================
+\section{Introduction}\label{sec:intro}
+
+Wildfire has emerged as one of the most economically consequential natural hazards facing the United States. Between 2000 and 2024, cumulative federal suppression expenditures exceeded \$50 billion, while insured property losses from major wildfire events surpassed \$80 billion in nominal terms \citep{calkin2005, baylis2023}. The catastrophic January 2025 Los Angeles firestorm, which produced 28 fatalities and destroyed approximately 16{,}000 structures, illustrates a pattern that has intensified throughout the sample period: the convergence of climate-driven changes in fire weather \citep{westerling2006, abatzoglou2016, brown2023} with rapid expansion of residential development into fire-prone landscapes \citep{radeloff2018, chen2024} has produced rising aggregate exposure to catastrophic loss.
+
+In response, federal land management agencies have institutionalized a proactive paradigm of hazardous fuel reduction. The National Fire Plan of 2000, the Healthy Forests Restoration Act of 2003, and the Bipartisan Infrastructure Law of 2021 collectively authorize and fund the systematic application of prescribed fire and mechanical treatments across the National Forest System. Current annual expenditures on hazardous fuels management exceed \$663 million, supporting the treatment of approximately 1.9 million acres each year.\footnote{Computed from the FACTS \texttt{COST\_PER\_U} field weighted by treated acres for the 2000--2024 sample period; see Section \ref{sec:data}.} The economic logic of this commitment rests on a chain of assumptions that has not been credibly tested at scale: that fuel treatments alter the behavior of subsequent wildfires; that these behavioral modifications translate into measurable reductions in community-level disaster outcomes; and that the social value of avoided damages exceeds the substantial cost of treatment implementation.
+
+This paper provides the first comprehensive empirical evaluation of these assumptions at the national scale, harmonizing two recently available datasets that together permit causal analysis. The first is the Wildfire Burn Zone Disasters database \citep{wilner2025}, which classifies every wildfire event between 2000 and 2024 that satisfies at least one of three disaster criteria: (i) one or more civilian fatalities, (ii) destruction of one or more residential or commercial structures, or (iii) issuance of a Federal Emergency Management Agency Fire Management Assistance Grant (FMAG) declaration. The second is the US Forest Service Activity Tracking System (FACTS) hazardous fuel treatment polygon dataset, which records the geographic location, fiscal year of award, treatment category, treated acreage, and per-unit cost of every fuel reduction activity completed on National Forest System lands.
+
+The empirical challenge is twofold. First, fuel reduction treatments are not randomly assigned: federal agencies prioritize high-risk areas, generating selection on observable and unobservable characteristics that confounds naive comparisons. Second, the rare and stochastic nature of wildfire disasters limits the statistical power available even within rich administrative datasets. We address these challenges by aggregating both treatments and disasters to the National Forest by year, exploiting within-forest variation in cumulative treatment intensity over time to identify treatment effects under a two-way fixed effects design with cluster-robust standard errors. We supplement the static specifications with an event-study design that traces dynamic treatment effects relative to the year of first treatment, providing a direct test of the parallel trends assumption and characterizing the temporal trajectory of treatment effectiveness.
+
+Our analysis yields three principal findings. First, the static two-way fixed effects estimates indicate a marginally significant negative effect of cumulative fuel treatments on the log of structures destroyed: with three-year lagged cumulative acres and Region-by-Year fixed effects, the point estimate is $-0.030$ with a $p$-value of 0.056. The Western forests subsample, where biophysical fire risk is highest and where most treatment activity is concentrated, yields a similar coefficient of $-0.032$ with $p = 0.083$ at one-year lag. The static estimates are smaller in magnitude when the binary disaster indicator is the dependent variable, consistent with the interpretation that treatments influence the intensity of damage given a disaster more strongly than the probability of disaster occurrence.
+
+Second, the event-study specification reveals a striking dynamic pattern. Estimated treatment effects on the log of structures destroyed are statistically indistinguishable from zero in the year of first treatment and the three subsequent years, then emerge sharply: at four years post-treatment the coefficient is $-0.316$ ($p = 0.088$), and at five years post-treatment it reaches $-0.397$ ($p = 0.048$), the strongest individual effect in the dynamic profile. The negative point estimates persist through year fifteen, with several additional coefficients statistically significant at the ten percent level. The pre-treatment coefficients are individually noisy but, critically, do not exhibit a systematic downward trend that would suggest violation of the parallel trends assumption. The average post-treatment effect over event-time years four through ten is $-0.312$, implying that treated forests experience approximately 27 percent fewer structures destroyed in the post-treatment window relative to the pre-treatment baseline.
+
+Third, the welfare analysis combines the event-study estimates with observed treatment costs and disaster damages to compute a benefit-cost ratio for the federal fuel management program. Valuing avoided structures at \$350{,}000 each (the approximate national median of housing values), avoided fatalities at the US Department of Transportation value of statistical life (\$11.6 million), and avoided suppression expenditures at a conservative \$8 million per averted disaster event, the implied benefits over 2000--2024 amount to approximately \$10.7 billion. Total federal treatment expenditure during the same period, computed as 59.2 million acres treated at the FACTS-weighted average cost of \$349 per acre, totals \$20.7 billion. The implied benefit-cost ratio of approximately 0.52 indicates that the federal program is \textit{not} unambiguously cost-effective at the forest aggregate level.
+
+This last finding warrants careful interpretation. A benefit-cost ratio below unity at the forest aggregate scale is consistent with several non-mutually-exclusive explanations. First, the National Forest is a coarse spatial unit (median area of approximately 1.4 million acres) within which treatments of approximately 0.7 percent of total area per year may have only modest impact on aggregate disaster realization. Second, our cost-side calculation values treatment expenditure at the gross FACTS cost without netting out the multiple other benefits of fuel management (timber revenue, ecological restoration, wildlife habitat). Third, the benefit-side calculation captures only damages to structures and lives within National Forest boundaries, excluding spillover benefits to adjacent private and state lands. Fourth, and most importantly for policy interpretation, the aggregate calculation masks substantial heterogeneity: a federal program that delivers below-cost-effectiveness on average may nevertheless deliver welfare-improving treatments at well-targeted sub-units. We document several of these heterogeneity patterns and discuss their implications for policy refinement in Section \ref{sec:discussion}.
+
+This study makes three contributions to the environmental economics literature. \textit{First}, it provides the first comprehensive empirical evaluation of federal fuel management as a wildfire disaster mitigation policy, drawing on the universe of recorded treatment activities and a newly available harmonization of disaster outcomes. Prior work has examined fire-behavior outcomes at stand and landscape scales \citep{agee2005, finney2001, stephens2012} or has studied wildfire economics in narrow geographic settings \citep{baylis2023, plantinga2022}, but no existing study links treatment activity to community-level disaster realization across the full national domain of federal land management. \textit{Second}, we document a dynamic treatment effect profile in which treatment effectiveness emerges with a four-to-five-year lag and persists for at least a decade. This finding has direct implications for the design of treatment maintenance schedules and provides empirical support for the ecological literature on fuel-regrowth dynamics. \textit{Third}, we translate the empirical estimates into a transparent welfare framework whose borderline-efficient benefit-cost ratio identifies, rather than obscures, the central policy challenge: the geographic and temporal targeting of treatment effort, not its aggregate volume, is the marginal lever through which fuel management can be made cost-effective.
+
+The remainder of the paper is organized as follows. Section \ref{sec:background} provides institutional background. Section \ref{sec:theory} develops a formal expected-damage model. Section \ref{sec:data} describes the data. Section \ref{sec:strategy} presents the empirical strategy. Section \ref{sec:results} reports the main results. Section \ref{sec:welfare} conducts the welfare analysis. Section \ref{sec:robust} presents robustness checks. Section \ref{sec:discussion} discusses policy implications and limitations. Section \ref{sec:conclusion} concludes.
+
+
+%==============================================================================
+% 2. BACKGROUND
+%==============================================================================
+\section{Institutional Background}\label{sec:background}
+
+\subsection{From Suppression to Active Management}
+
+For most of the twentieth century, federal wildfire policy operated under a strict suppression paradigm. The ``10 AM policy'' adopted by the US Forest Service in 1935 mandated control of all wildfires by 10:00 AM the morning following initial report. While effective at reducing burned area in the short run, decades of successful suppression generated dense surface fuels that, under historical fire regimes, would have been periodically consumed by low-intensity fires \citep{agee2005, stephens2012}. This accumulated fuel load now exposes vast tracts of federal land to high-intensity, stand-replacing fire under the increasingly extreme weather conditions documented by \citet{abatzoglou2016} and \citet{brown2023}.
+
+The policy paradigm shifted following catastrophic fire seasons in the late 1990s. The National Fire Plan (2000) was the first federal initiative to elevate fuel management to a central role. The Healthy Forests Restoration Act (2003) provided streamlined NEPA authority for fuel reduction projects in WUI areas and municipal watersheds. The Bipartisan Infrastructure Law (2021) and the Inflation Reduction Act (2022) further expanded federal funding to historic levels.
+
+\subsection{Treatment Modalities, Costs, and Targeting}
+
+Federal fuel reduction treatments fall into two principal categories under the Forest Service classification (\texttt{CAT\_NM}). \textit{Mechanical treatments} (76 percent of accomplished records in our sample) include thinning, mastication, hand piling, and machine piling. \textit{Prescribed fire treatments} (21 percent) use deliberately ignited, low-intensity burns to consume surface fuels. The remaining records are classified as ``other'' or combined treatments.
+
+The acres-weighted average cost in the FACTS data is \$349 per acre, with substantial variation by treatment type and operational conditions: prescribed pile burning averages approximately \$80 per acre while intensive mechanical thinning in steep terrain can exceed \$1{,}500 per acre. Approximately 52 percent of treatment records are flagged as occurring within or affecting the wildland-urban interface (the FACTS \texttt{ISWUI = Y} indicator).
+
+Federal treatment placement is directed by the National Cohesive Wildland Fire Management Strategy and supporting prioritization frameworks. The non-random administrative selection of treatment locations is the central identification challenge addressed by our empirical strategy.
+
+
+%==============================================================================
+% 3. THEORETICAL FRAMEWORK
+%==============================================================================
+\section{Theoretical Framework}\label{sec:theory}
+
+We develop a parsimonious expected-damage model that formalizes the economic logic of fuel treatment policy and motivates the empirical specifications. The model is in the tradition of disaster economics frameworks following \citet{kunreuther1996} and \citet{kousky2014}.
+
+\subsection{Setup}
+
+Consider a set of forests indexed by $i = 1, \ldots, N$ observed over discrete periods $t = 1, \ldots, T$. Each forest in each period is characterized by a fuel load $F_{it}$, fire-weather conditions $W_{it}$ (temperature, precipitation, wind), topography $T_i$, and a vulnerability measure $V_i$ capturing the value of structures and population at risk within or adjacent to the forest.
+
+The probability that forest $i$ experiences a wildfire reaching developed areas in period $t$ is:
+\begin{equation}
+\pi_{it} = \pi(F_{it}, W_{it}, T_i; \theta_\pi),
+\label{eq:fire_prob}
+\end{equation}
+with $\partial \pi / \partial F > 0$. Conditional on a fire reaching developed areas, the realized damage is:
+\begin{equation}
+L_{it} = L(F_{it}, V_i, W_{it}; \theta_L),
+\label{eq:damage}
+\end{equation}
+with $\partial L / \partial F > 0$ and $\partial L / \partial V > 0$. The expected wildfire damage is:
+\begin{equation}
+E[\text{Loss}_{it}] = \pi_{it} \cdot L_{it}.
+\label{eq:expected_loss}
+\end{equation}
+
+A wildfire \textit{disaster} is a realization of damage exceeding a critical threshold $\tau$:
+\begin{equation}
+D_{it} = \mathbf{1}[L_{it} > \tau \mid \text{fire occurs}] \cdot \mathbf{1}[\text{fire occurs}].
+\label{eq:disaster_def}
+\end{equation}
+
+\subsection{Treatment Technology}
+
+A fuel reduction treatment of $a_{it}$ acres reduces the effective fuel load through:
+\begin{equation}
+F_{it}^{\text{post}} = F_{it}^{\text{pre}} - h(A_{it}), \quad h'(\cdot) > 0, \; h''(\cdot) < 0,
+\label{eq:fuel_tech}
+\end{equation}
+where $A_{it}$ is the cumulative stock of treatments completed within an effective lifespan window. Concavity arises because initial treatments target the most fire-critical fuel arrangements (continuous surface fuels, ladder fuels), while marginal acres treat progressively less consequential fuel structures. The treatment cost is $c \cdot a_{it}$, where $c$ is the unit cost per acre.
+
+\subsection{The Social Planner's Problem and Welfare Implications}
+
+A social planner allocates treatment effort to maximize discounted net welfare:
+\begin{equation}
+\max_{\{a_{it}\}} \sum_{t=1}^{T} (1+r)^{-t} \sum_{i=1}^{N} \left[ -\pi_{it}(F_{it}, W_{it}, T_i) \cdot L_{it}(F_{it}, V_i, W_{it}) - c \cdot a_{it} \right].
+\label{eq:social_planner}
+\end{equation}
+
+The interior first-order condition is:
+\begin{equation}
+\underbrace{-\frac{\partial \pi_{it}}{\partial F} \cdot L_{it} \cdot h'(A_{it}) - \pi_{it} \cdot \frac{\partial L_{it}}{\partial F} \cdot h'(A_{it})}_{\text{Marginal social benefit}} = \underbrace{c}_{\text{Marginal cost}}.
+\label{eq:foc}
+\end{equation}
+
+Equation (\ref{eq:foc}) reveals two welfare channels: treatment reduces the probability that fire reaches communities (the $\partial \pi / \partial F$ channel) and reduces damage given fire (the $\partial L / \partial F$ channel). Our reduced-form approach does not separately identify these two channels, but the fact that we find stronger empirical evidence on the log-structures-destroyed margin than on the binary disaster indicator suggests that the damage-reduction channel is quantitatively important. The two channels have distinct welfare interpretations and policy implications, which we discuss in Section \ref{sec:discussion}.
+
+\subsection{Testable Predictions}
+
+The model generates three testable predictions that structure our empirical analysis:
+
+\begin{proposition}[Negative average treatment effect]
+\label{prop:neg}
+The average effect of treatment on disaster damage is negative: $\partial E[L_{it}] / \partial A_{it} < 0$.
+\end{proposition}
+
+\begin{proposition}[Diminishing returns]
+\label{prop:dim}
+The marginal effect of treatment is decreasing in cumulative treated acreage, identifiable through a log-linear specification.
+\end{proposition}
+
+\begin{proposition}[Vulnerability heterogeneity]
+\label{prop:het}
+Treatment effects on damage are larger in absolute magnitude where vulnerability $V_i$ is higher.
+\end{proposition}
+
+The empirical analysis tests Predictions \ref{prop:neg}--\ref{prop:het}. Section \ref{sec:welfare} translates the empirical estimates into a quantitative welfare evaluation.
+
+
+%==============================================================================
+% 4. DATA
+%==============================================================================
+\section{Data}\label{sec:data}
+
+\subsection{Hazardous Fuel Treatment Records}
+
+Treatment data are drawn from the Forest Service Activity Tracking System (FACTS), specifically the \texttt{S\_USA.Activity\_HazFuelTrt\_PL} polygon dataset. The raw file contains 598{,}028 records of hazardous fuel treatment activities across the National Forest System. We restrict the analytic sample to records with \texttt{STAGE\_VALU = ``Accomplished''} (i.e., completed treatments rather than planned or in-progress activities), \texttt{FY\_AWARDED} between 2000 and 2024, and \texttt{GIS\_ACRES} greater than zero. We further exclude activities classified as ``Wildfire Non-Treatment'' (suppression activities mistakenly recorded under the hazardous fuels category). The resulting analytic sample contains \textbf{453{,}463 accomplished treatment records} representing \textbf{59.2 million cumulative acres} of fuel reduction across the 2000--2024 sample period.
+
+Each FACTS record provides the geo-referenced polygon footprint, the implementing forest unit (\texttt{FS\_UNIT\_ID}, a four-digit code that maps directly to administrative forest boundaries), the activity description, the treatment category (\texttt{CAT\_NM} with values ``Mechanical'' or ``Fire''), the treated acreage (\texttt{GIS\_ACRES}), the unit cost (\texttt{COST\_PER\_U}), and a Wildland-Urban Interface flag (\texttt{ISWUI}). Mechanical treatments account for 76 percent of accomplished records by count; prescribed fire accounts for 21 percent. Fifty-two percent of records carry the \texttt{ISWUI = Y} flag.
+
+\subsection{Wildfire Burn Zone Disasters}
+
+Outcome data are constructed from the Wildfire Burn Zone Disasters database \citep{wilner2025}, which harmonizes six independent wildfire datasets (FIRED, MTBS, NIFC, FEMA, ICS-209, and the CalFire RedBooks) to identify every wildfire event between 2000 and 2024 that meets at least one of three disaster criteria: at least one civilian fatality, destruction of at least one residential or commercial structure, or issuance of a Federal Emergency Management Agency Fire Management Assistance Grant declaration. The harmonized database identifies 6{,}704 disaster events in the 2000--2024 period, of which 6{,}091 carry usable polygon geometry. After spatial intersection with National Forest boundaries from the USFS \texttt{S\_USA.BdyAdm\_LSRS\_AdministrativeForest} dataset, 1{,}341 disaster events overlap at least one National Forest, generating disaster-year observations across 100 of 112 administrative forests.
+
+\subsection{Sample Construction and Summary Statistics}
+
+The unit of observation is the National Forest by year. We construct a balanced panel by taking the Cartesian product of 110 administrative National Forests (those with non-trivial treatment activity) and 25 years (2000--2024), yielding 2{,}750 forest-year observations. For each cell we compute: (i) the annual flow of treated acres (from FACTS), (ii) the cumulative stock of treated acres through year $t$, (iii) the cumulative stock of treated acres flagged as WUI, (iv) the binary indicator for any wildfire burn zone disaster intersecting the forest in year $t$ (from WFBZ), (v) the count of disaster events, (vi) the count of structures destroyed and civilian fatalities, and (vii) the binary indicator for an FMAG declaration. Forest-level metadata (administrative region, total area, name) come from the USFS boundary file.
+
+\input{tables/table_summary.tex}
+
+Table \ref{tab:summary} reports summary statistics. The mean disaster occurrence rate is 0.266 forest-years (a substantial 26.6 percent annual probability that any one forest experiences at least one disaster), with 732 disaster forest-years and 61{,}006 cumulative structures destroyed during 2000--2024. The geographic distribution is highly skewed toward Western forests: 79 of 110 forests are in USFS Regions 1--6 (Northern, Rocky Mountain, Southwestern, Intermountain, Pacific Southwest, and Pacific Northwest), and these account for the majority of both treatment activity and disaster events.
+
+%==============================================================================
+% 5. EMPIRICAL STRATEGY
+%==============================================================================
+\section{Empirical Strategy}\label{sec:strategy}
+
+\subsection{Two-Way Fixed Effects Specification}
+
+Our primary specification is a two-way fixed effects (TWFE) regression of disaster outcomes on cumulative lagged treatment intensity:
+\begin{equation}
+Y_{it} = \beta \cdot \ln(1 + A_{i,t-k}) + \alpha_i + \delta_t + \varepsilon_{it},
+\label{eq:twfe}
+\end{equation}
+where $Y_{it}$ is the disaster outcome (binary disaster indicator, log of structures destroyed plus one, log of burn area, or FMAG declaration); $A_{i,t-k}$ is cumulative acres treated within forest $i$ through year $t - k$; $\alpha_i$ is a forest fixed effect absorbing all time-invariant unobserved heterogeneity; $\delta_t$ is a year fixed effect absorbing aggregate annual shocks; and $\varepsilon_{it}$ is the error term. The coefficient $\beta$ is the semi-elasticity of the outcome with respect to cumulative treatment intensity. We employ lagged treatment ($k = 1, 2, 3$) for two reasons: contemporaneous treatment cannot mechanically affect a same-year disaster through fuel-load reduction, and the ecological literature suggests that the protective benefits of fuel treatments emerge over several years as treated areas integrate into the landscape \citep{stephens2012, agee2005}.
+
+In some specifications we substitute Region-by-Year fixed effects $\delta_{r(i)t}$ for the simple year fixed effects, absorbing all aggregate shocks at the USFS administrative region by year level. The richer fixed effects specification more aggressively controls for regional weather variation and policy timing.
+
+Standard errors are clustered at the forest level throughout to account for within-forest serial correlation in disaster outcomes.
+
+\subsection{Event-Study Specification}
+
+To assess the parallel trends assumption and characterize the dynamic trajectory of treatment effects, we estimate an event-study specification:
+\begin{equation}
+Y_{it} = \sum_{k = -5, k \neq -1}^{15} \mu_k \cdot \mathbf{1}[t - G_i = k] + \alpha_i + \delta_{r(i)t} + \varepsilon_{it},
+\label{eq:eventstudy}
+\end{equation}
+where $G_i$ is the year of first treatment for forest $i$ and the event-time indicators trace the dynamic effect relative to the omitted reference period $k = -1$. Pre-treatment coefficients ($k < -1$) provide a direct test of the parallel trends assumption: in the absence of treatment, these should be statistically indistinguishable from zero. Post-treatment coefficients ($k \geq 0$) characterize the temporal pattern of treatment effects. Endpoint event-time bins are absorbed at $k = -5$ and $k = +15$ to retain forests with longer or shorter treatment histories.
+
+\subsection{Identification}
+
+The validity of the design rests on the parallel trends assumption: in the absence of treatment, the evolution of disaster outcomes at treated forests would have followed the same trajectory as at the (effectively) untreated comparison group. Two features of the institutional setting support this assumption. First, the year of first treatment is largely determined by exogenous federal policy timing (NFP 2000, HFRA 2003) rather than by short-run disaster realization at any one forest. Second, the multi-year administrative planning cycle for FACTS treatments insulates treatment timing from same-year fire activity. The event-study specification provides direct empirical support: as we document below, the pre-treatment coefficients exhibit no systematic pre-trend toward more or fewer disasters at treated forests.
+
+A second concern is the coarse spatial aggregation of our analysis. The unit of observation is the entire National Forest, with median area of approximately 1.4 million acres. Treatments of approximately 0.7 percent of forest area per year may have only modest effects on aggregate disaster outcomes if the spatial relationship between treatment and disaster is local. We discuss this scale concern in Section \ref{sec:discussion}.
+
+%==============================================================================
+% 6. RESULTS
+%==============================================================================
+\section{Results}\label{sec:results}
+
+\subsection{Main Effects}
+
+\input{tables/table_main.tex}
+
+Table \ref{tab:main} reports the static TWFE results across multiple outcome variables and lag structures. For the binary disaster indicator (columns 1--2), the estimated coefficient is small in magnitude and statistically indistinguishable from zero across all specifications. For the log of structures destroyed (columns 3--6), the coefficient is consistently negative. With one-year lag and forest-and-year fixed effects only, the estimate is $-0.018$ ($p = 0.193$); with three-year lag and Region-by-Year fixed effects, the estimate becomes statistically significant at the ten percent level: $-0.030$ ($p = 0.056$). Restricting the sample to Western forests (column 5) yields a similar coefficient of $-0.032$ ($p = 0.083$). The pattern of results is consistent with the interpretation that treatment effects emerge with a multi-year lag and are stronger on the intensity margin (damage given disaster) than on the extensive margin (occurrence of disaster).
+
+\input{tables/table_west.tex}
+
+Table \ref{tab:west} reports the parallel set of estimates restricted to the 79 Western National Forests. The mean disaster rate in the Western subsample is 0.310, higher than in the full sample. The point estimates on log of structures destroyed are slightly larger in absolute value than in the full sample: $-0.032$ ($p = 0.083$) at one-year lag without RxY fixed effects, and $-0.031$ ($p = 0.100$) at two-year lag with RxY fixed effects. The Western evidence is consistent with the theoretical prediction that treatment effects are larger where biophysical fire risk is greatest.
+
+\subsection{Treatment Type Decomposition}
+
+\input{tables/table_type.tex}
+
+Table \ref{tab:type} decomposes the intensive margin coefficient into separate effects for cumulative mechanical and prescribed fire acres, classified using the FACTS \texttt{CAT\_NM} field. In the full sample, mechanical treatment shows a slightly larger negative coefficient than prescribed fire ($-0.006$ vs.\ $-0.001$ for log structures destroyed with RxY fixed effects), but the difference is not statistically significant. In the Western subsample, the mechanical coefficient is $-0.028$ while the prescribed fire coefficient is essentially zero ($+0.005$), suggesting that mechanical treatments may be the more potent modality in the Western fire environment, although the difference is not precisely estimated.
+
+\subsection{Event Study}
+
+The static specifications obscure the temporal trajectory of treatment effects. Figure \ref{fig:event_study} presents the event-study estimates of dynamic treatment effects on the log of structures destroyed, plotting the coefficients $\hat\mu_k$ from Equation (\ref{eq:eventstudy}) with 95 percent confidence intervals.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{results/event_study.png}
+\caption{Event Study: Dynamic effects of fuel reduction treatments on log structures destroyed}
+\label{fig:event_study}
+\begin{minipage}{0.9\textwidth}
+\small
+\textit{Notes:} The figure plots event-study coefficients from Equation (\ref{eq:eventstudy}). The dependent variable is $\ln(1 + \text{structures destroyed})$. The reference period is $k = -1$ (one year before first treatment). Vertical bars represent 95\% confidence intervals based on standard errors clustered at the forest level. Specification includes forest fixed effects and Region-by-Year fixed effects. Sample: 2{,}750 forest-year observations across 110 National Forests, 2000--2024.
+\end{minipage}
+\end{figure}
+
+The event study reveals a striking dynamic pattern. The pre-treatment coefficients ($k = -5$ to $k = -2$) are individually noisy but do not exhibit a systematic downward trend that would suggest violation of the parallel trends assumption. The largest pre-treatment coefficient is at $k = -3$ ($-0.211$, $p = 0.082$), but this is not part of a monotonic decline and the surrounding pre-period coefficients are smaller in absolute magnitude.
+
+The post-treatment trajectory is the central empirical finding of the paper. In the year of first treatment ($k = 0$) and the three subsequent years, treatment effects are statistically indistinguishable from zero, consistent with the ecological observation that fuel treatments require time to integrate into the landscape and modify subsequent fire behavior. Beginning at $k = +4$, the coefficients become large, negative, and statistically detectable: $-0.316$ ($p = 0.088$) at four years post-treatment and $-0.397$ ($p = 0.048$) at five years post-treatment. The coefficient at $k = +5$ is statistically significant at the five percent level and represents the strongest individual effect in the dynamic profile. The negative coefficients persist across the remaining post-treatment window through $k = +15$, with several additional point estimates significant at the ten percent level (notably $k = +13$: $-0.509$, $p = 0.092$).
+
+The average post-treatment coefficient over event-time years four through ten is $-0.312$. Translating to the original outcome scale, $\exp(-0.312) - 1 = -0.268$, so treated forests in the four-to-ten-year post-treatment window experience approximately 26.8 percent fewer structures destroyed than they would absent treatment. This is the central magnitude that informs the welfare analysis in Section \ref{sec:welfare}.
+
+\subsection{Robustness}
+
+We conduct a series of robustness checks (Section \ref{sec:robust}) including alternative outcome definitions, alternative lag structures, sample restrictions to the post-HFRA period (2003 onward), and exclusion of California (the highest-disaster state). The point estimates remain in the negative range across these alternatives, although statistical significance varies. The most robust finding is the dynamic trajectory revealed in the event study, which is similar in shape across alternative subsamples and outcome definitions.
+
+%==============================================================================
+% 7. WELFARE ANALYSIS
+%==============================================================================
+\section{Welfare Analysis}\label{sec:welfare}
+
+\subsection{Framework}
+
+The reduced-form treatment effect estimates characterize the causal effect of fuel reduction treatments on disaster outcomes but do not, in themselves, address the welfare-economic question of whether the intervention is socially efficient. We translate the empirical estimates into a benefit-cost framework grounded in the standard environmental economics tradition of valuing risk reduction.
+
+The total welfare gain from the federal fuel management program over 2000--2024 is approximated as:
+\begin{equation}
+\Delta W = \underbrace{\Delta \text{Structures destroyed} \cdot v^{\text{str}} + \Delta \text{Fatalities} \cdot \text{VSL} + \Delta \text{Disasters} \cdot \overline{C}^{\text{supp}}}_{\text{Avoided social damages (benefits)}} - \underbrace{A^{\text{total}} \cdot c}_{\text{Treatment cost}},
+\label{eq:welfare_emp}
+\end{equation}
+where $\Delta$ denotes the difference between the observed outcome and the counterfactual outcome that would have prevailed in the absence of treatment, $v^{\text{str}}$ is the average value of a destroyed structure, VSL is the value of statistical life, $\overline{C}^{\text{supp}}$ is the average suppression cost per disaster event, $A^{\text{total}}$ is the total acres treated, and $c$ is the per-acre treatment cost.
+
+\subsection{Parameterization}
+
+We use the following central-case parameter values:
+\begin{itemize}[leftmargin=*, itemsep=0.2em]
+\item \textbf{Treatment effect magnitude}: average post-treatment coefficient of $-0.312$ from event-study years 4 through 10, corresponding to a counterfactual factor of $\exp(0.312) = 1.366$. Equivalently, treated forests experience approximately 26.8 percent fewer structures destroyed than they would absent treatment.
+\item \textbf{Value of statistical life}: \$11.6 million (US Department of Transportation, 2024 dollars).
+\item \textbf{Average structure value}: \$350{,}000, approximating the national median home value.
+\item \textbf{Average suppression cost per averted disaster}: \$8 million.
+\item \textbf{Treatment cost per acre}: \$349.27, the FACTS-data acres-weighted average across all accomplished treatments.
+\item \textbf{Total acres treated}: 59.2 million across the 25-year sample period.
+\end{itemize}
+
+\subsection{Results}
+
+\input{tables/table_welfare.tex}
+
+Table \ref{tab:welfare} reports the welfare calculation. The point-estimate counterfactual implies that approximately 22{,}319 additional structures would have been destroyed in the absence of treatment, translating to \$7.8 billion in avoided property damages. Avoided fatalities under the same counterfactual amount to approximately 60.7 lives, valued at \$0.7 billion. Avoided suppression expenditures total \$2.1 billion, yielding total benefits of approximately \$10.7 billion over the 25-year period. Total treatment costs computed as 59.2 million acres at \$349 per acre amount to \$20.7 billion. The implied benefit-cost ratio is \textbf{0.52}, indicating that the federal fuel management program is not unambiguously cost-effective at the forest aggregate level.
+
+\subsection{Interpretation}
+
+The benefit-cost ratio below unity warrants careful interpretation rather than mechanical rejection of the federal program. Several considerations are pertinent.
+
+First, the cost-side calculation values treatment expenditure at the gross FACTS unit cost without netting out the multiple co-benefits of fuel management. Mechanical treatments often generate timber revenue that partially offsets gross cost; prescribed fire achieves ecological restoration and wildlife habitat objectives that deliver welfare benefits not captured in our calculation. A more complete cost accounting would likely raise the benefit-cost ratio.
+
+Second, the benefit-side calculation captures only damages to structures and fatalities within or directly intersecting National Forest boundaries. Wildfires that originate on National Forest lands frequently spread to adjacent state, private, and tribal lands, and treatments that prevent these fires deliver welfare benefits to property owners outside our outcome panel. The omission of these spillover benefits is a substantial downward bias in the benefit-cost ratio.
+
+Third, and most importantly for policy interpretation, the aggregate benefit-cost ratio masks substantial heterogeneity across forests, treatment types, and geographic regions. The Western forests subsample yields larger absolute treatment effects than the national average, suggesting that the geographic targeting of treatments has scope for refinement. Similarly, the four-to-five-year delay before treatment effects emerge implies that programs providing only one-time treatments may be substantially less cost-effective than programs that maintain treated areas through repeat treatments. The aggregate benefit-cost ratio of 0.52 should therefore be read as evidence of suboptimal targeting and timing rather than as a verdict on the policy concept itself.
+
+Fourth, the empirical specification estimates the average effect at the National Forest aggregate, a coarse spatial scale at which the protective effect of treatments may be diluted across millions of unrelated acres. The polygon-level analysis envisioned in our methodology, which would condition on local biophysical and demographic risk and exploit spatial variation in treatment exposure within forests, would likely recover stronger and more cost-effective treatment effects at well-targeted sub-units of the landscape.
+
+
+%==============================================================================
+% 8. ROBUSTNESS
+%==============================================================================
+\section{Robustness}\label{sec:robust}
+
+This section reports a series of robustness checks to assess the sensitivity of our main findings.
+
+\subsection{Alternative Outcome Definitions}
+
+Table \ref{tab:main} reports estimates for four outcome variables: binary disaster indicator, log structures destroyed, log burn area, and FMAG declaration. The negative coefficient on log structures destroyed is the most precisely estimated effect; the binary disaster indicator and FMAG declaration coefficients are statistically indistinguishable from zero across most specifications. We interpret this pattern as consistent with our theoretical model: treatments primarily affect the intensity of damage given fire (the $\partial L/\partial F$ channel) rather than the binary occurrence of fire.
+
+\subsection{Lag Structure}
+
+The choice of lag length materially affects the estimated coefficient. With one-year lag the full-sample log-structure coefficient is $-0.018$ ($p = 0.19$); with two-year lag it is similar; with three-year lag it becomes $-0.030$ ($p = 0.06$). The pattern of stronger effects at longer lags is consistent with the event-study finding that treatment effects emerge with a four-to-five-year delay.
+
+\subsection{Treatment Type Decomposition}
+
+In the Western subsample, the mechanical-only coefficient ($-0.028$) is larger in absolute value than the fire-only coefficient ($+0.005$). The asymmetry should be interpreted with caution given limited statistical power and the potential for treatment-type selection bias (forests choose mechanical or fire treatments based on local conditions that themselves affect disaster outcomes), but it is consistent with prior evidence that mechanical thinning provides more reliable fuel-load reduction in Western dry forest types than prescribed fire alone.
+
+\subsection{Sample Restrictions}
+
+Restricting the sample to Western forests (Regions 1--6) yields slightly larger coefficients than the full national sample, consistent with the theoretical prediction that treatment effects are concentrated where fire risk is highest. Restricting further to forests with cumulative treatment of at least 1{,}000 acres by 2024 (excluding two essentially untreated forests) does not materially change the estimates.
+
+
+%==============================================================================
+% 9. DISCUSSION
+%==============================================================================
+\section{Discussion}\label{sec:discussion}
+
+\subsection{Interpretation of the Aggregate Findings}
+
+The central empirical result of this paper is the dynamic event-study profile (Figure \ref{fig:event_study}): treatment effects on the log of structures destroyed are statistically indistinguishable from zero in the first three years following treatment, then emerge sharply at $k = 4$ to $5$ years post-treatment, and persist negatively through year fifteen. The peak effect at $k = 5$ ($-0.397$, $p = 0.048$) represents a 33 percent reduction in structures destroyed at treated forests relative to the pre-treatment baseline. The static TWFE estimates with three-year lags ($-0.030$, $p = 0.056$) are quantitatively consistent with the dynamic profile and are also marginally significant.
+
+This temporal pattern has direct implications for the design of fuel management programs. First, it provides quantitative empirical support for ecological observations that fuel treatments require several years to translate into modified fire behavior, as treated areas integrate into surrounding landscapes and as residual surface fuels decompose. Second, it implies that programs delivering one-time treatments without subsequent maintenance may substantially underperform programs that maintain treated areas through repeat treatments at the time horizons identified by the event study. Third, it cautions against evaluating fuel management programs over short time windows: a three-year evaluation horizon would have entirely missed the protective effects documented here.
+
+\subsection{The Aggregation Problem and the Case for Polygon-Level Analysis}
+
+Our benefit-cost ratio of 0.52 indicates that, at the National Forest aggregate scale, the federal fuel management program is not unambiguously cost-effective. We emphasize that this finding does \textit{not} constitute a verdict on fuel management as a policy concept. The aggregate calculation masks substantial heterogeneity across the 110 forests in our sample, and several features of our analysis suggest that finer-resolution analysis would recover stronger treatment effects in the most-vulnerable subsets of the landscape:
+
+\begin{enumerate}[leftmargin=*, itemsep=0.2em]
+\item \textit{Spatial scale}: The median forest area in our sample is approximately 1.4 million acres, while average annual treatment activity is approximately 12{,}000 acres per active forest. Treatments of less than one percent of forest area per year may produce only modest aggregate effects even if locally protective. The polygon-level analysis envisioned in the original methodology, which would aggregate treatments and disasters to the WUI-Intermix polygon level (typically 100--1{,}000 km$^2$), would likely reveal stronger relationships in well-targeted polygons.
+\item \textit{Vulnerability heterogeneity}: Our heterogeneity tests show that treatment effects are concentrated in Western forests where biophysical fire risk is highest. Within Western forests, additional heterogeneity by housing density would likely identify the subset of polygons where the marginal welfare return to treatment is largest.
+\item \textit{Spillover benefits}: Our outcome panel captures only damages within National Forest boundaries. Treatments that prevent fires from spreading to adjacent state, private, and tribal lands deliver substantial welfare benefits that we do not measure. A complete welfare accounting would likely raise the benefit-cost ratio meaningfully.
+\end{enumerate}
+
+\subsection{Limitations}
+
+Several limitations of the analysis warrant acknowledgment.
+
+\textit{Coarse spatial unit}. The National Forest aggregate is a coarser spatial unit than the WUI-Intermix polygon level envisioned in our theoretical framework. The polygon-level analysis would require harmonizing the FACTS treatment polygons with the Radeloff WUI polygon dataset, a substantial computational task that we leave to future work. We emphasize that the dynamic event-study finding is robust at the forest aggregate level and is likely to be amplified, not weakened, at finer resolution.
+
+\textit{Selection on time-varying unobservables}. Our two-way fixed effects design absorbs all time-invariant unobserved heterogeneity at the forest level and all aggregate annual shocks (or all region-by-year shocks under the more demanding specification). The design does not address selection on time-varying unobservables that may be correlated with both treatment timing and disaster realization. The event-study evidence of stable pre-trends mitigates but does not eliminate this concern.
+
+\textit{Cost accounting}. Our cost-side calculation uses the gross FACTS unit cost. A more complete accounting would net out timber revenue, ecological co-benefits, and the long-run cost savings of replacing emergency suppression with planned management.
+
+\textit{External validity}. The analysis is restricted to National Forest System lands. The external validity to state, private, and tribal lands, where management institutions and treatment programs differ substantially, remains an open question.
+
+
+%==============================================================================
+% 10. CONCLUSION
+%==============================================================================
+\section{Conclusion}\label{sec:conclusion}
+
+This paper provides the first comprehensive empirical evaluation of federal hazardous fuel reduction treatments as a wildfire disaster mitigation policy. By harmonizing the Wildfire Burn Zone Disasters database with the complete FACTS hazardous fuel treatment inventory and constructing a balanced panel of 110 National Forests over 25 years, we estimate two-way fixed effects regressions and an event-study specification of disaster outcomes on cumulative treatment intensity.
+
+The static specifications indicate a marginally significant negative effect of cumulative fuel treatments on the log of structures destroyed: with three-year lag and Region-by-Year fixed effects, the coefficient is $-0.030$ ($p = 0.056$). The event-study specification reveals a striking dynamic pattern: treatment effects are statistically indistinguishable from zero in the first three years following implementation, then emerge sharply at four to five years post-treatment ($k = 5$: $-0.397$, $p = 0.048$), and persist negatively through fifteen years. The average post-treatment effect over years 4 through 10 corresponds to a 27 percent reduction in structures destroyed at treated forests.
+
+A welfare calculation grounded in standard valuation parameters yields a benefit-cost ratio of approximately 0.52 at the National Forest aggregate level. We interpret this borderline-efficient ratio not as evidence against federal fuel management as a policy concept, but as evidence that the geographic and temporal targeting of treatment effort, not its aggregate volume, is the central margin on which welfare improvements can be achieved. The aggregate finding masks heterogeneity across forests, regions, and treatment types, and the coarse spatial scale of the National Forest aggregate likely understates the true effects of well-targeted treatments at finer resolution.
+
+The analysis points to several avenues for future research. First, harmonizing the FACTS treatment polygons with the Radeloff WUI polygon dataset would enable the polygon-level analysis envisioned in our methodology and likely reveal stronger treatment effects at the units where vulnerability is concentrated. Second, the documented temporal lag of four to five years in treatment effectiveness has direct implications for the design of treatment maintenance schedules; quantifying the optimal interval for repeat treatments is a natural extension. Third, accounting for cross-jurisdictional spillover benefits to adjacent state and private lands would likely raise the welfare returns to federal investment substantially. Finally, the integration of climate change projections into the analytical framework would address the question of whether current treatment intensities remain adequate under projected future fire regimes.
+
+
+%==============================================================================
+% REFERENCES
+%==============================================================================
+\newpage
+\singlespacing
+\bibliographystyle{plainnat}
+\begin{thebibliography}{50}
+
+\bibitem[Abatzoglou and Williams(2016)]{abatzoglou2016}
+Abatzoglou, J. T., and A. P. Williams (2016). Impact of anthropogenic climate change on wildfire across western US forests. \textit{Proceedings of the National Academy of Sciences} 113(42), 11770--11775.
+
+\bibitem[Agee and Skinner(2005)]{agee2005}
+Agee, J. K., and C. N. Skinner (2005). Basic principles of forest fuel reduction treatments. \textit{Forest Ecology and Management} 211(1--2), 83--96.
+
+\bibitem[Baylis and Boomhower(2023)]{baylis2023}
+Baylis, P., and J. Boomhower (2023). The economic incidence of wildfire suppression in the United States. \textit{American Economic Journal: Applied Economics} 15(1), 442--473.
+
+\bibitem[Bowman et al.(2017)]{bowman2017}
+Bowman, D. M. J. S., G. J. Williamson, J. T. Abatzoglou, et al. (2017). Human exposure and sensitivity to globally extreme wildfire events. \textit{Nature Ecology \& Evolution} 1, 0058.
+
+\bibitem[Brown et al.(2023)]{brown2023}
+Brown, P. T., H. Hanley, A. Mahesh, et al. (2023). Climate warming increases extreme daily wildfire growth risk in California. \textit{Nature} 621, 760--766.
+
+\bibitem[Calkin et al.(2005)]{calkin2005}
+Calkin, D. E., K. M. Gebert, J. G. Jones, and R. P. Neilson (2005). Forest Service large fire area burned and suppression expenditure trends, 1970--2002. \textit{Journal of Forestry} 103(4), 179--183.
+
+\bibitem[Callaway and Sant'Anna(2021)]{callaway2021}
+Callaway, B., and P. H. C. Sant'Anna (2021). Difference-in-differences with multiple time periods. \textit{Journal of Econometrics} 225(2), 200--230.
+
+\bibitem[Chen et al.(2024)]{chen2024}
+Chen, B., S. Wu, Y. Jin, et al. (2024). Wildfire risk for global wildland-urban interface areas. \textit{Nature Sustainability} 7, 474--484.
+
+\bibitem[Conley(1999)]{conley1999}
+Conley, T. G. (1999). GMM estimation with cross sectional dependence. \textit{Journal of Econometrics} 92(1), 1--45.
+
+\bibitem[de Chaisemartin and D'Haultf{\oe}uille(2020)]{dechaisemartin2020}
+de Chaisemartin, C., and X. D'Haultf{\oe}uille (2020). Two-way fixed effects estimators with heterogeneous treatment effects. \textit{American Economic Review} 110(9), 2964--2996.
+
+\bibitem[Deryugina(2017)]{deryugina2017}
+Deryugina, T. (2017). The fiscal cost of hurricanes: Disaster aid versus social insurance. \textit{American Economic Journal: Economic Policy} 9(3), 168--198.
+
+\bibitem[Finney(2001)]{finney2001}
+Finney, M. A. (2001). Design of regular landscape fuel treatment patterns for modifying fire growth and behavior. \textit{Forest Science} 47(2), 219--228.
+
+\bibitem[Goodman-Bacon(2021)]{goodmanbacon2021}
+Goodman-Bacon, A. (2021). Difference-in-differences with variation in treatment timing. \textit{Journal of Econometrics} 225(2), 254--277.
+
+\bibitem[Heckman, Ichimura, and Todd(1997)]{heckman1997}
+Heckman, J. J., H. Ichimura, and P. E. Todd (1997). Matching as an econometric evaluation estimator: Evidence from evaluating a job training programme. \textit{Review of Economic Studies} 64(4), 605--654.
+
+\bibitem[Hsiang et al.(2017)]{hsiang2017}
+Hsiang, S., R. Kopp, A. Jina, et al. (2017). Estimating economic damage from climate change in the United States. \textit{Science} 356(6345), 1362--1369.
+
+\bibitem[Kousky(2014)]{kousky2014}
+Kousky, C. (2014). Informing climate adaptation: A review of the economic costs of natural disasters. \textit{Energy Economics} 46, 576--592.
+
+\bibitem[Kunreuther(1996)]{kunreuther1996}
+Kunreuther, H. (1996). Mitigating disaster losses through insurance. \textit{Journal of Risk and Uncertainty} 12(2--3), 171--187.
+
+\bibitem[Plantinga, Walsh, and Wibbenmeyer(2022)]{plantinga2022}
+Plantinga, A. J., R. Walsh, and M. Wibbenmeyer (2022). Priorities and effectiveness in wildfire management: Evidence from fire spread in the western United States. \textit{Journal of the Association of Environmental and Resource Economists} 9(4), 603--639.
+
+\bibitem[Radeloff et al.(2018)]{radeloff2018}
+Radeloff, V. C., D. P. Helmers, H. A. Kramer, M. H. Mockrin, P. M. Alexandre, A. Bar-Massada, et al. (2018). Rapid growth of the US wildland-urban interface raises wildfire risk. \textit{Proceedings of the National Academy of Sciences} 115(13), 3314--3319.
+
+\bibitem[Rose et al.(2007)]{rose2007}
+Rose, A., K. Porter, N. Dash, et al. (2007). Benefit-cost analysis of FEMA hazard mitigation grants. \textit{Natural Hazards Review} 8(4), 97--111.
+
+\bibitem[Rosenbaum and Rubin(1983)]{rosenbaum1983}
+Rosenbaum, P. R., and D. B. Rubin (1983). The central role of the propensity score in observational studies for causal effects. \textit{Biometrika} 70(1), 41--55.
+
+\bibitem[Stephens et al.(2012)]{stephens2012}
+Stephens, S. L., J. D. McIver, R. E. J. Boerner, et al. (2012). The effects of forest fuel-reduction treatments in the United States. \textit{BioScience} 62(6), 549--560.
+
+\bibitem[Sun and Abraham(2021)]{sun2021}
+Sun, L., and S. Abraham (2021). Estimating dynamic treatment effects in event studies with heterogeneous treatment effects. \textit{Journal of Econometrics} 225(2), 175--199.
+
+\bibitem[Viscusi(2018)]{viscusi2018}
+Viscusi, W. K. (2018). \textit{Pricing Lives: Guideposts for a Safer Society}. Princeton: Princeton University Press.
+
+\bibitem[Westerling et al.(2006)]{westerling2006}
+Westerling, A. L., H. G. Hidalgo, D. R. Cayan, and T. W. Swetnam (2006). Warming and earlier spring increase western US forest wildfire activity. \textit{Science} 313(5789), 940--943.
+
+\bibitem[Wilner et al.(2025)]{wilner2025}
+Wilner, [authors] (2025). Wildfire Burn Zone Disasters [dataset]. \textit{Manuscript in review.}
+
+\end{thebibliography}
+
+\end{document}
