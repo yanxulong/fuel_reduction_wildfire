@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026) (preloaded format=pdflatex 2026.4.17)  6 MAY 2026 11:10
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026) (preloaded format=pdflatex 2026.4.17)  6 MAY 2026 11:16
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -481,70 +481,70 @@ Overfull \vbox (94.17027pt too high) has occurred while \output is active []
 
 Overfull \vbox (94.17027pt too high) has occurred while \output is active []
 
- [17] [18] [19] [20] [21] [22] [23] [24] [25] [26] [27]
+ [17] [18] [19] [20] [21] [22] [23] [24] [25] [26] [27] [28]
 Overfull \vbox (68.77257pt too high) has occurred while \output is active []
 
 
 Overfull \vbox (68.77257pt too high) has occurred while \output is active []
 
- [28] [29] [30] [31] [32] [33] [34] [35]
-Underfull \hbox (badness 3118) in paragraph at lines 639--640
+ [29] [30] [31] [32] [33] [34] [35] [36]
+Underfull \hbox (badness 3118) in paragraph at lines 651--652
 \OT1/cmr/m/n/10.95 loff WUI clas-si-fi-ca-tion: Low ($\OML/cmm/m/it/10.95 <$ \OT1/cmr/m/n/10.95 49
  []
 
-[36]
+[37]
 Overfull \vbox (40.25217pt too high) has occurred while \output is active []
 
 
 Overfull \vbox (40.25217pt too high) has occurred while \output is active []
 
- [37] [38] [39] [40] [41]
+ [38] [39] [40] [41] [42]
 Overfull \vbox (198.66212pt too high) has occurred while \output is active []
 
 
 Overfull \vbox (198.66212pt too high) has occurred while \output is active []
 
- [42] [43] [44] [45] [46]
-Overfull \hbox (7.74696pt too wide) in paragraph at lines 796--797
+ [43] [44] [45] [46] [47]
+Overfull \hbox (7.74696pt too wide) in paragraph at lines 808--809
 \OT1/cmr/m/n/12 The long-difference de-sign im-ple-ments the clean-est pos-si-ble iden-ti-fi-ca-tion check on the matched
  []
 
 
-Underfull \hbox (badness 1127) in paragraph at lines 824--825
+Underfull \hbox (badness 1127) in paragraph at lines 836--837
 []\OT1/cmr/m/it/10.95 Notes: \OT1/cmr/m/n/10.95 Polygon-level first-difference re-gres-sions on the
  []
 
-[47] [48] [49] [50]
-Overfull \hbox (18.7844pt too wide) in paragraph at lines 879--879
+[48] [49] [50] [51]
+Overfull \hbox (18.7844pt too wide) in paragraph at lines 891--891
 []\OT1/cmr/bx/n/14.4 Placebo, Sam-ple Com-po-si-tion, and Drop-Always-Treated Checks 
  []
 
-[51] [52] [53]
-Overfull \hbox (0.60184pt too wide) in paragraph at lines 909--910
+[52] [53] [54]
+Overfull \hbox (0.60184pt too wide) in paragraph at lines 921--922
 \OT1/cmr/m/it/12 First\OT1/cmr/m/n/12 , the matched DiD het-ero-gene-ity re-sult is ro-bust enough across func-tional forms, climate-
  []
 
-[54] [55] [56] [57] [58] [59] [60] [61] [62] [63] (./paper_jeem.aux)
+[55] [56] [57] [58] [59] [60] [61] [62] [63] [64] (./paper_jeem.aux)
  ***********
 LaTeX2e <2025-11-01>
 L3 programming layer <2026-03-20>
  ***********
 Package rerunfilecheck Info: File `paper_jeem.out' has not changed.
-(rerunfilecheck)             Checksum: 231DA9960620E5B9A5628877D3684906;9206.
+(rerunfilecheck)             Checksum: 1A4C585123549EE678151DAC06F4BAD4;9228.
  ) 
 Here is how much of TeX's memory you used:
- 13786 strings out of 469339
- 216773 string characters out of 5465874
- 646340 words of memory out of 5000000
- 42221 multiletter control sequences out of 15000+600000
+ 13791 strings out of 469339
+ 216834 string characters out of 5465874
+ 646491 words of memory out of 5000000
+ 42223 multiletter control sequences out of 15000+600000
  645329 words of font info for 104 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
  75i,14n,79p,3105b,625s stack positions out of 10000i,1000n,20000p,200000b,200000s
- </Users/long/Library/TinyTeX/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1095.600pk> </Users/long/Library/TinyTeX/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1200.600pk> </Users/long/Library/TinyTeX/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm0700.600pk> </Users/long/Library/TinyTeX/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1000.600pk></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi12.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi6.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi8.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmib10.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmti12.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt12.pfb>
-Output written on paper_jeem.pdf (65 pages, 389488 bytes).
+ </Users/long/Library/TinyTeX/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1095.600pk> </Users/long/Library/TinyTeX/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1200.600pk> </Users/long/Library/TinyTeX/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm0700.600pk> </Users/long/Library/TinyTeX/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1000.600pk></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi12.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi6.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi8.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmib10.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmti12.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt12.pfb></Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb>
+Output written on paper_jeem.pdf (66 pages, 395345 bytes).
 PDF statistics:
- 906 PDF objects out of 1000 (max. 8388607)
- 794 compressed objects within 8 object streams
- 214 named destinations out of 1000 (max. 500000)
+ 935 PDF objects out of 1000 (max. 8388607)
+ 819 compressed objects within 9 object streams
+ 217 named destinations out of 1000 (max. 500000)
  393 words of extra memory for PDF output out of 10000 (max. 10000000)
 

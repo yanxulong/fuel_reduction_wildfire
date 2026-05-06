@@ -343,43 +343,55 @@ We implement coarsened-exact matching on state of residence at the first stage, 
 
 The matched analytic sample contains 273{,}361 polygons (45{,}547 treated and 227{,}814 matched controls) drawn from the 947{,}427-polygon vicinity panel. After matching, all six standardized mean differences are below 0.12, the conventional threshold of \citet{rosenbaum1983}, with the largest residual difference on log polygon area (SMD = 0.116). Common support is verified by direct inspection of the linear-propensity-score distributions in the treated and matched-control populations. We define a binary flag \texttt{matched\_sample} on the panel that equals one for both treated and matched-control polygons in the analytic sample and zero otherwise, and use it to restrict all subsequent regressions in Stage 2 to the matched sample.
 
-\subsection{Stage 2: Matched Difference-in-Differences}\label{sec:did}
+\subsection{Stage 2: Staggered Difference-in-Differences}\label{sec:did}
 
-On the matched analytic sample we estimate a two-way fixed effects linear probability model:
+The matched analytic sample exhibits staggered treatment adoption: treated polygons receive their first FACTS treatment in different calendar years between 2003 and 2024, with cohorts concentrated in the post-HFRA budget expansion of 2003--2006 and the post-Bipartisan Infrastructure Law expansion of 2021--2024. With staggered adoption and heterogeneous treatment effects across cohorts, the conventional two-way fixed-effects estimator places negative implicit weights on already-treated cohorts and recovers a coefficient that does not in general correspond to any well-defined causal parameter \citep{goodmanbacon2021, dechaisemartin2020, sun2021, borusyak2024}. We therefore depart from the static TWFE used in the V1 of this paper and estimate the staggered DiD using the cohort-time average treatment effect on the treated framework of \citet{callaway2021}.
+
+Let $G_i \in \{2003, \ldots, 2024, +\infty\}$ denote the year of first FACTS treatment within the 5 km buffer of polygon $i$, with $G_i = +\infty$ for polygons that are never treated during the panel window. Let $D_{it}(g)$ denote the potential disaster outcome if polygon $i$ were first treated in year $g$, and $D_{it}(\infty)$ the never-treated potential outcome. The cohort-time average treatment effect on the treated is
 \begin{equation}
-D_{it} = \beta_1 \cdot FRT_{it} + \boldsymbol{\gamma}' \mathbf{X}_{it} + \alpha_i + \delta_t + \varepsilon_{it},
-\label{eq:twfe}
+ATT(g, t) = E\!\left[D_{it}(g) - D_{it}(\infty) \mid G_i = g\right], \quad t \geq g.
+\label{eq:att_gt}
 \end{equation}
-where $D_{it}$ is the binary disaster indicator for WUI polygon $i$ in year $t$; $FRT_{it}$ is the cumulative-ever indicator equal to one if any completed FACTS treatment exists within the 5 km buffer of polygon $i$ by year $t$ (and zero otherwise); $\mathbf{X}_{it} = (\text{tmean}_{it}, \ln(1 + \text{ppt}_{it}))$ is a two-vector of time-varying PRISM climate controls; $\alpha_i$ are polygon fixed effects; $\delta_t$ are year fixed effects; and $\varepsilon_{it}$ is a polygon-year error term. The coefficient $\beta_1$ identifies a weighted average of within-polygon contrasts between treated and untreated years, conditional on national fire-weather shocks absorbed by year fixed effects and on local time-varying climatic conditions absorbed by $\mathbf{X}_{it}$. We estimate (\ref{eq:twfe}) using the \texttt{linearmodels.PanelOLS} routine with entity and time effects, and we report standard errors clustered at the polygon level to accommodate within-polygon autocorrelation in disaster outcomes.
+Under conditional parallel trends and a no-anticipation assumption, $ATT(g, t)$ is identified by the doubly-robust difference between cohort-$g$ polygons and the matched never-treated comparison group, conditional on the propensity-score matching covariates $\mathbf{Z}_i$ and the time-varying PRISM climate vector $\mathbf{X}_{it} = (\mathrm{tmean}_{it}, \ln(1 + \mathrm{ppt}_{it}))$:
+\begin{equation}
+\widehat{ATT}(g, t) = E\!\left[\!\left(\frac{T_{ig}}{P(T_{ig} = 1)} - \frac{p_g(\mathbf{Z}_i)\, U_i}{(1 - p_g(\mathbf{Z}_i))\, P(T_{ig} = 1)}\right) \cdot \big(D_{it} - D_{i, g-1} - m_{g,t}(\mathbf{Z}_i, \mathbf{X}_{it})\big)\right],
+\label{eq:dr_att}
+\end{equation}
+where $T_{ig} = \mathbf{1}[G_i = g]$, $U_i = \mathbf{1}[G_i = +\infty]$, $p_g(\cdot)$ is the cohort-specific propensity score reestimated on the matched panel, and $m_{g,t}(\cdot)$ is the conditional outcome-evolution function for the never-treated comparison group. Equation (\ref{eq:dr_att}) implements the doubly-robust estimator: $\widehat{ATT}(g, t)$ is consistent if either the propensity score or the outcome model is correctly specified \citep{callaway2021}.
 
-We complement the binary $FRT_{it}$ specification with three intensive-margin alternatives. The first uses the natural log of cumulative treated acres, $\ln(1 + A_{it})$ where $A_{it} = \sum_{s \leq t} a_{is}$. The second uses the decay-weighted treatment stock,
+We aggregate the cohort-time estimates into three summary parameters. The simple average treatment effect on the treated, weighted by cohort size, is
+\begin{equation}
+ATT^{\text{simple}} = \sum_{g} \omega_g \sum_{t \geq g} ATT(g, t), \quad \omega_g = \frac{P(G_i = g)}{P(G_i \leq T)}.
+\label{eq:att_simple}
+\end{equation}
+The event-study profile averages cohort-specific dynamic effects at each event time $e = t - g$,
+\begin{equation}
+\theta(e) = \sum_{g} \tilde{\omega}_g \cdot ATT(g, g + e), \quad e = -K, \ldots, +K,
+\label{eq:event_study}
+\end{equation}
+with $\tilde{\omega}_g$ the cohort weights conditional on cohort $g$ being observed at event time $e$. Cohort-specific summaries $\overline{ATT}(g) = \frac{1}{T - g + 1} \sum_{t \geq g} ATT(g, t)$ characterize differential effects across the budget regimes of the panel. Inference for all three aggregations uses the polygon-clustered multiplier bootstrap of \citet{callaway2021} with $B = 1{,}000$ replications, which respects within-polygon autocorrelation and joint inference across $(g, t)$ pairs.
+
+Pre-trend testing is conducted on $ATT(g, t)$ for $t < g - 1$, skipping the immediate pre-treatment period $g - 1$. The institutional reason is documented in Section \ref{sec:results}: federal agencies are 78 percent more likely to initiate a polygon's first FACTS treatment in the year immediately following a disaster at that polygon than in a year following a non-disaster, generating a one-period Ashenfelter-style spike in disaster realizations at event time $-1$ that is unrelated to the parallel-trends assumption per se. Restricting the pre-trend test to $t \leq g - 2$ purges this mechanical contamination. We report the unrestricted set of pre-treatment $ATT(g, t)$ in the event-study figure to allow direct visual assessment, alongside a joint Wald test of $H_0: ATT(g, t) = 0$ for all $t \leq g - 2$.
+
+\subsubsection{Heterogeneity by WUI Density}
+
+Proposition \ref{prop:heterogeneity} predicts that the absolute treatment effect is larger where vulnerability is greater. We partition the matched sample into the three Radeloff density classes (Low, $< 49$ units/km$^2$; Medium, $49$--$741$; High, $> 741$) and estimate the staggered DiD separately within each class:
+\begin{equation}
+ATT^k(g, t) = E\!\left[D_{it}(g) - D_{it}(\infty) \mid G_i = g, \mathrm{density}_i = k\right], \quad k \in \{L, M, H\},
+\label{eq:hetero_att}
+\end{equation}
+with the same doubly-robust score and bootstrap inference as the pooled specification. The within-class simple aggregations $ATT^k$ are reported alongside the pooled $ATT^{\text{simple}}$, with the test $H_0: ATT^L = ATT^H$ providing the formal discipline on Proposition \ref{prop:heterogeneity}.
+
+\subsubsection{Severity and Intensive-Margin Outcomes}
+
+We re-estimate the staggered DiD with the severity outcome $\ln(1 + S_{it})$, where $S_{it}$ is the total structures destroyed in polygon $i$ during year $t$, summed across intersecting WFBZ disaster events. The Callaway-Sant'Anna estimator is defined for any continuous outcome variable; the cohort-time and event-study aggregations are interpreted as effects on log structures destroyed.
+
+The intensive-margin treatment definition does not extend directly to a binary cohort design without auxiliary parametric structure. We therefore retain the static TWFE specification using the decay-weighted stock $\ln(1 + T_{it})$ where
 \begin{equation}
 T_{it} = \sum_{s \leq t} a_{is} \cdot \exp\!\left(-\frac{t - s}{\tau}\right),
 \label{eq:tstock}
 \end{equation}
-with decay parameter $\tau = 5$ years (approximately 3.5 year half-life), entered as $\ln(1 + T_{it})$. The decay specification implements the ecological prior of \citet{stephens2012} that fuel treatments degrade in effectiveness as untreated fuels regrow, and is the natural intensive-margin counterpart to the binary $FRT_{it}$ when treatments are persistent but waning. The third uses the three-year-lagged binary indicator $FRT_{i,t-3}$, which both isolates the physical fuel-load reduction channel from contemporaneous selection and matches the typical fire-return interval over which the protective channel is most plausible.
-
-We re-estimate (\ref{eq:twfe}) with the severity outcome $\ln(1 + S_{it})$, where $S_{it}$ is the total structures destroyed in WUI polygon $i$ during year $t$, summed across intersecting WFBZ disaster events. Because the severity outcome is dominated by within-disaster variation rather than across-year variation, it is in principle more robust than the binary occurrence outcome to the regression-to-the-mean dynamics that contaminate selection-on-fire-activity comparisons.
-
-\subsubsection{Heterogeneity by WUI Density}
-
-Proposition \ref{prop:heterogeneity} predicts that the absolute treatment effect on disaster probability is larger where vulnerability is greater. We test this prediction by interacting the binary treatment indicator with WUI density-class dummies:
-\begin{equation}
-D_{it} = \sum_{k \in \{L, M, H\}} \beta_1^k \cdot FRT_{it} \cdot \mathbf{1}[\text{density}_i = k] + \boldsymbol{\gamma}' \mathbf{X}_{it} + \alpha_i + \delta_t + \varepsilon_{it},
-\label{eq:hetero}
-\end{equation}
-where the density classes follow the Radeloff WUI classification: Low ($<$49 units/km$^2$), Medium (49 to 741), and High ($>$741). The three coefficients $\{\beta_1^L, \beta_1^M, \beta_1^H\}$ identify the within-density-class within-polygon treatment effect, jointly estimated on the matched sample with the same fixed-effect and clustering structure as the pooled specification.
-
-\subsubsection{Event Study and Donut Specification}
-
-To assess parallel trends and characterize the dynamic trajectory of treatment effects, we estimate a binned-event-time specification:
-\begin{equation}
-D_{it} = \sum_{k \in \mathcal{B}} \mu_k \cdot \mathbf{1}[t - G_i \in k] + \boldsymbol{\gamma}' \mathbf{X}_{it} + \alpha_i + \delta_t + \varepsilon_{it},
-\label{eq:event_study}
-\end{equation}
-where $G_i$ is the year of first treatment for polygon $i$ and $\mathcal{B}$ partitions event time into the bins $\{(-\infty, -5], [-4, -2], -1, 0, [1, 3], [4, 6], [7, +\infty)\}$, with $-1$ omitted as the reference period. The coefficients $\{\mu_k\}_{k < -1}$ test parallel trends; the coefficients $\{\mu_k\}_{k \geq 0}$ trace the post-treatment dynamic. The binned specification trades off resolution against statistical precision in a setting where the disaster rate is 0.083 percent and individual event-time cells would otherwise be too thin to interpret. We additionally estimate the conventional five-year future-treatment placebo, restricted to untreated polygon-years, as a direct test of pre-existing differences in disaster rates between future-treated and never-treated polygons.
-
-We complement the binned event study with a \textit{donut} variant that drops the immediate three pre-treatment years $k \in [-3, -1]$ and uses $k = -5$ as the reference. The donut design isolates the question of whether the parallel-trends violation is driven by an Ashenfelter-style spike in disaster activity in the years immediately preceding treatment placement (consistent with treatments being allocated right after a high-disaster year) or by a deeper, structural pre-trend that begins more than three years before treatment.
+with $\tau = 5$ years (approximately 3.5-year half-life), and the cumulative log acres $\ln(1 + A_{it})$, both reported alongside the staggered DiD as a complementary descriptive exercise rather than an additional causal estimate. We flag explicitly that these intensive-margin coefficients are subject to the same staggered-adoption-induced TWFE concerns the headline staggered DiD is designed to overcome.
 
 \subsection{Stage 3: Long-Difference Design}\label{sec:long_diff}
 
@@ -460,7 +472,7 @@ We assess Assumption \ref{ass:parallel} through both the binned event study and 
 
 \subsection{Sample Balance and Identifying Variation}
 
-The propensity score matching procedure described in Section \ref{sec:psm} reduces the analytic sample from the 947{,}427-polygon vicinity panel to 273{,}361 matched polygons (45{,}547 treated and 227{,}814 matched controls), corresponding to 6{,}834{,}025 polygon-year observations over 2000--2024. Coarsened-exact matching on state of residence ensures within-state common support, and the post-match standardized mean differences are all below the conventional 0.12 threshold of \citet{rosenbaum1983}: log polygon area (0.116), Intermix indicator (0.054), High-density share (0.041), Medium-density share (0.073), pre-period mean temperature (0.089), pre-period log precipitation (0.052), and pre-period disaster rate (0.061). The identifying contrast in Equation (\ref{eq:twfe}) is therefore the within-polygon difference between years in which a given polygon had accumulated FACTS treatments within its 5 km buffer and years in which it had not, conditional on year fixed effects, time-varying climate controls, and the cross-sectional balance generated by the matching procedure.
+The propensity score matching procedure described in Section \ref{sec:psm} reduces the analytic sample from the 947{,}427-polygon vicinity panel to 273{,}361 matched polygons (45{,}547 treated and 227{,}814 matched controls), corresponding to 6{,}834{,}025 polygon-year observations over 2000--2024. Coarsened-exact matching on state of residence ensures within-state common support, and the post-match standardized mean differences are all below the conventional 0.12 threshold of \citet{rosenbaum1983}: log polygon area (0.116), Intermix indicator (0.054), High-density share (0.041), Medium-density share (0.073), pre-period mean temperature (0.089), pre-period log precipitation (0.052), and pre-period disaster rate (0.061). The identifying contrast in Equation (\ref{eq:dr_att}) is therefore the doubly-robust difference between treated cohort $g$ and the matched never-treated comparison group at each event time $t \geq g$, conditional on the matching covariates $\mathbf{Z}_i$ and the time-varying climate vector $\mathbf{X}_{it}$.
 
 The mean disaster rate on the matched sample is $0.00083$ polygon-years, slightly below the full vicinity panel mean of $0.00090$. Across 6{,}834{,}025 matched polygon-years there are 5{,}658 disaster polygon-years, conditional on which the average number of structures destroyed is 1{,}044 and the average number of civilian fatalities is 2.89. The mean of $FRT_{it}$ on the matched sample is $0.107$, reflecting the over-representation of treated polygons in the matched set, and the average annual treated acreage per treated polygon-year is 609 acres within the 5 km buffer.
 

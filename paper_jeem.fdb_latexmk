@@ -1,6 +1,6 @@
 # Fdb version 4
-["pdflatex"] 1778091005.05863 "/Users/long/Files/my_devstack/fuel_reduction_wildfire/paper_jeem.tex" "paper_jeem.pdf" "paper_jeem" 1778091005.47807 0
-  "/Users/long/Files/my_devstack/fuel_reduction_wildfire/paper_jeem.tex" 1778091004.14005 134577 0f1eba9590548f17a0a73b4f96c0f372 ""
+["pdflatex"] 1778091381.57266 "/Users/long/Files/my_devstack/fuel_reduction_wildfire/paper_jeem.tex" "paper_jeem.pdf" "paper_jeem" 1778091382.00491 0
+  "/Users/long/Files/my_devstack/fuel_reduction_wildfire/paper_jeem.tex" 1778091381.40805 135637 e6976d4f51d168d185e2ed7fe933bc36 ""
   "/Users/long/Library/TinyTeX/texmf-dist/fonts/tfm/jknappen/ec/ectt1000.tfm" 1136768653 1536 06717a2b50de47d4087ac0e6cd759455 ""
   "/Users/long/Library/TinyTeX/texmf-dist/fonts/tfm/jknappen/ec/tcrm0700.tfm" 1136768653 1536 73da8e8f1d2a4c957d51ca133585586b ""
   "/Users/long/Library/TinyTeX/texmf-dist/fonts/tfm/jknappen/ec/tcrm1000.tfm" 1136768653 1536 e07581a4bb3136ece9eeb4c3ffab8233 ""
@@ -58,6 +58,7 @@
   "/Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb" 1248133631 37944 359e864bd06cde3b1cf57bb20757fb06 ""
   "/Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmti12.pfb" 1248133631 36118 fad905eba93cff5bce1e185fe980a177 ""
   "/Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt12.pfb" 1248133631 24252 1e4e051947e12dfb50fee0b7f4e26e3a ""
+  "/Users/long/Library/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb" 1248133631 34694 ad62b13721ee8eda1dcc8993c8bd7041 ""
   "/Users/long/Library/TinyTeX/texmf-dist/tex/generic/bigintcalc/bigintcalc.sty" 1576625341 40635 c40361e206be584d448876bba8a64a3b ""
   "/Users/long/Library/TinyTeX/texmf-dist/tex/generic/bitset/bitset.sty" 1576016050 33961 6b5c75130e435b2bfdb9f480a09a39f9 ""
   "/Users/long/Library/TinyTeX/texmf-dist/tex/generic/etexcmds/etexcmds.sty" 1576625273 7734 b98cbb34c81f667027c1e3ebdbfce34b ""
@@ -131,9 +132,9 @@
   "/Users/long/Library/TinyTeX/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1200.600pk" 1778089077.54425 14040 d97ad27d0c2f656f73432b2eb4109c71 ""
   "/Users/long/Library/TinyTeX/texmf-var/web2c/pdftex/pdflatex.fmt" 1776455505 2241697 29acf34b037ea137c65ae516136fd207 ""
   "/Users/long/Library/TinyTeX/texmf.cnf" 1774151798 637 edd806fb06a89761a6034e1968af9017 ""
-  "paper_jeem.aux" 1778091005.42276 17343 843d252cf2e9e4023ac053a500187ea8 "pdflatex"
-  "paper_jeem.out" 1778091005.42367 9206 231da9960620e5b9a5628877d3684906 "pdflatex"
-  "paper_jeem.tex" 1778091004.14005 134577 0f1eba9590548f17a0a73b4f96c0f372 ""
+  "paper_jeem.aux" 1778091381.95729 17686 9b949664ff9565ccbe8ca208c5ed7dd4 "pdflatex"
+  "paper_jeem.out" 1778091381.95815 9228 1a4c585123549ee678151dac06f4bad4 "pdflatex"
+  "paper_jeem.tex" 1778091381.40805 135637 e6976d4f51d168d185e2ed7fe933bc36 ""
   (generated)
   "paper_jeem.aux"
   "paper_jeem.log"
