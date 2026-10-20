@@ -54,7 +54,7 @@ WORK_DIR="$(mktemp -d "${OUTPUT_DIR}/.split_silvis_wui.XXXXXX")"
 trap 'rm -rf -- "${WORK_DIR}"' EXIT
 
 printf 'Source layer: %s (%s features)\n' "${SOURCE_LAYER}" "${SOURCE_FEATURE_COUNT}"
-printf 'All records retained, including non-WUI blocks; output format: GeoPackage.\n'
+printf 'All records retained, including non-WUI blocks; output format: FlatGeobuf.\n'
 
 for year in "${YEARS[@]}"; do
     case "${year}" in
@@ -73,7 +73,7 @@ for year in "${YEARS[@]}"; do
     temporary_output="${WORK_DIR}/silvis_wui_${year}.fgb"
     temporary_layer="wui_${year}"
 
-    printf 'Exporting %s to GeoPackage...\n' "${year}"
+    printf 'Exporting %s to FlatGeobuf...\n' "${year}"
     ogr2ogr \
         -f FlatGeobuf "${temporary_output}" \
         "${SOURCE_GDB}" "${SOURCE_LAYER}" \
@@ -102,9 +102,9 @@ done
 
 for year in "${YEARS[@]}"; do
     mv -- \
-        "${WORK_DIR}/silvis_wui_${year}.gpkg" \
-        "${OUTPUT_DIR}/silvis_wui_${year}.gpkg"
-    printf 'Created: %s\n' "${OUTPUT_DIR}/silvis_wui_${year}.gpkg"
+            "${WORK_DIR}/silvis_wui_${year}.fgb" \
+            "${OUTPUT_DIR}/silvis_wui_${year}.fgb"
+    printf 'Created: %s\n' "${OUTPUT_DIR}/silvis_wui_${year}.fgb"
 done
 
 printf 'All four year files created successfully.\n'

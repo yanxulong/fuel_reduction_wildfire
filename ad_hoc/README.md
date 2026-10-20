@@ -27,7 +27,7 @@ module load gdal/3.12.1-gcc-11.3.0-netcdf-4.9.3
 bash ad_hoc/split_silvis_wui_by_year.sh
 ```
 
-The source has about 9.16 million block features; the script checks output counts and refuses to overwrite existing GeoPackages. Check project quota before running. Keep generated data and logs out of Git.
+The source has about 9.16 million block features; the script checks output counts and refuses to overwrite existing FlatGeobuf files. Check project quota before running. Keep generated data and logs out of Git.
 
 ## Stage FACTS, PRISM, TIGER, and MTBS on MSI
 
