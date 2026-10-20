@@ -25,8 +25,8 @@ if [[ ! -d "${SOURCE_GDB}" ]]; then
     exit 1
 fi
 
-if ! ogrinfo --format GPKG >/dev/null 2>&1; then
-    printf 'GDAL GeoPackage driver unavailable. Check loaded GDAL module.\n' >&2
+if ! ogrinfo --format FlatGeobuf >/dev/null 2>&1; then
+    printf 'GDAL FlatGeobuf driver unavailable. Check loaded GDAL module.\n' >&2
     exit 1
 fi
 
@@ -34,7 +34,7 @@ mkdir -p "${OUTPUT_DIR}"
 exec > >(tee -a "${LOG_PATH}") 2>&1
 
 for year in "${YEARS[@]}"; do
-    output_path="${OUTPUT_DIR}/silvis_wui_${year}.gpkg"
+    output_path="${OUTPUT_DIR}/silvis_wui_${year}.fgb"
     if [[ -e "${output_path}" ]]; then
         printf 'Output already exists; refusing to overwrite: %s\n' "${output_path}" >&2
         exit 1
@@ -70,12 +70,12 @@ for year in "${YEARS[@]}"; do
 
     selected_fields=(BLK20 STATE fips PUBFLAG WATER20 AWATER20PC "${year_fields[@]}")
     select_list="$(IFS=,; printf '%s' "${selected_fields[*]}")"
-    temporary_output="${WORK_DIR}/silvis_wui_${year}.gpkg"
+    temporary_output="${WORK_DIR}/silvis_wui_${year}.fgb"
     temporary_layer="wui_${year}"
 
     printf 'Exporting %s to GeoPackage...\n' "${year}"
     ogr2ogr \
-        -f GPKG "${temporary_output}" \
+        -f FlatGeobuf "${temporary_output}" \
         "${SOURCE_GDB}" "${SOURCE_LAYER}" \
         -select "${select_list}" \
         -nln "${temporary_layer}" \

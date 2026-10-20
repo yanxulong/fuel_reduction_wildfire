@@ -17,7 +17,7 @@ Check available project storage before starting. Do not commit the archive or ge
 
 ## Split SILVIS WUI by mapped year
 
-`split_silvis_wui_by_year.sh` exports the extracted File Geodatabase into four single-file GeoPackages under `data/processed/wui_by_year/`: 1990, 2000, 2010, and 2020. Each output retains every source block, including non-WUI blocks (`WUIFLAG` 0), so non-WUI comparison areas remain available. It keeps block/state/FIPS identifiers, water and protected-area fields, plus housing, density, vegetation, WUI flag, and WUI class fields for the selected year. The SILVIS source describes the four mapped years and WUI classes on its [WUI Change page](https://silvis.forest.wisc.edu/data/wui-change/).
+`split_silvis_wui_by_year.sh` exports the extracted File Geodatabase into four single-file FlatGeobuf files under `data/processed/wui_by_year/`: 1990, 2000, 2010, and 2020. Each output retains every source block, including non-WUI blocks (`WUIFLAG` 0), so non-WUI comparison areas remain available. It keeps block/state/FIPS identifiers, water and protected-area fields, plus housing, density, vegetation, WUI flag, and WUI class fields for the selected year. FlatGeobuf is available in the MSI GDAL build and supports spatial indexing. The SILVIS source describes the four mapped years and WUI classes on its [WUI Change page](https://silvis.forest.wisc.edu/data/wui-change/).
 
 Run from the MSI checkout in an interactive compute allocation after syncing code:
 
