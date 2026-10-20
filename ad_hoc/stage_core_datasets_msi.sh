@@ -62,7 +62,7 @@ download_zip() {
         printf '[resume] %s: completed archive recovered from partial file\n' "$dataset"
     else
         printf '[download] %s\n  url: %s\n  to:  %s\n' "$dataset" "$url" "$part"
-        if ! curl --fail --location --retry 5 --retry-all-errors \
+        if ! curl --fail --location --retry 5 \
             --retry-delay 5 --continue-at - --progress-bar \
             --output "$part" "$url"; then
             printf '[error] %s download failed; partial file retained for resume\n' "$dataset" >&2
