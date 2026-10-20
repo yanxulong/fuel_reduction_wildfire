@@ -86,10 +86,24 @@ download_zip() {
 printf '\n[stage 1/4] FACTS treatment polygons\n'
 FACTS_DIR="$RAW_ROOT/FACTS/snapshot_${RUN_DATE}"
 FACTS_ZIP="$FACTS_DIR/Actv_HazFuelTrt_PL.zip"
-download_zip "FACTS_HazFuelTrt_PL" "$FACTS_URL" "$FACTS_ZIP"
 FACTS_EXTRACT="$FACTS_DIR/Actv_HazFuelTrt_PL"
-mkdir -p "$FACTS_EXTRACT"
-unzip -oq "$FACTS_ZIP" -d "$FACTS_EXTRACT"
+FACTS_SHP="$FACTS_EXTRACT/Actv_HazFuelTrt_PL.shp"
+if [[ -s "$FACTS_SHP" && \
+      -s "$FACTS_EXTRACT/Actv_HazFuelTrt_PL.shx" && \
+      -s "$FACTS_EXTRACT/Actv_HazFuelTrt_PL.dbf" && \
+      -s "$FACTS_EXTRACT/Actv_HazFuelTrt_PL.prj" ]]; then
+    printf '[skip] complete FACTS shapefile bundle already staged: %s\n' "$FACTS_EXTRACT"
+    for ext in shp shx dbf prj cpg; do
+        path="$FACTS_EXTRACT/Actv_HazFuelTrt_PL.$ext"
+        if [[ -s "$path" ]]; then
+            record_file "FACTS_HazFuelTrt_PL_${ext}" "$path" "local_upload_or_existing_bundle"
+        fi
+    done
+else
+    download_zip "FACTS_HazFuelTrt_PL" "$FACTS_URL" "$FACTS_ZIP"
+    mkdir -p "$FACTS_EXTRACT"
+    unzip -oq "$FACTS_ZIP" -d "$FACTS_EXTRACT"
+fi
 FACTS_SHP="$(find "$FACTS_EXTRACT" -type f -name 'Actv_HazFuelTrt_PL.shp' -print -quit)"
 if [[ -z "$FACTS_SHP" ]]; then
     printf '[error] expected Actv_HazFuelTrt_PL.shp missing after extraction\n' >&2
