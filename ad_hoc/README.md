@@ -14,3 +14,17 @@ bash ad_hoc/download_silvis_wui.sh
 ```
 
 Check available project storage before starting. Do not commit the archive or generated metadata.
+
+## Split SILVIS WUI by mapped year
+
+`split_silvis_wui_by_year.sh` exports the extracted File Geodatabase into four single-file GeoPackages under `data/processed/wui_by_year/`: 1990, 2000, 2010, and 2020. Each output retains every source block, including non-WUI blocks (`WUIFLAG` 0), so non-WUI comparison areas remain available. It keeps block/state/FIPS identifiers, water and protected-area fields, plus housing, density, vegetation, WUI flag, and WUI class fields for the selected year. The SILVIS source describes the four mapped years and WUI classes on its [WUI Change page](https://silvis.forest.wisc.edu/data/wui-change/).
+
+Run from the MSI checkout in an interactive compute allocation after syncing code:
+
+```bash
+cd /users/8/yxlong/projects/fuel_reduction_wildfire/code
+module load gdal/3.12.1-gcc-11.3.0-netcdf-4.9.3
+bash ad_hoc/split_silvis_wui_by_year.sh
+```
+
+The source has about 9.16 million block features; the script checks output counts and refuses to overwrite existing GeoPackages. Check project quota before running. Keep generated data and logs out of Git.
