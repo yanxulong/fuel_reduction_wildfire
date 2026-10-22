@@ -11,7 +11,11 @@ import initialization
 
 
 CONFIG = {
-    "enabled_tasks": ["build_wui_singlepart_dataset", "build_fire_wui_centroid_path_distance_samples"],
+    "enabled_tasks": [
+        "build_wui_singlepart_dataset",
+        "build_wui_annual_mtbs_outcomes",
+        "build_fire_wui_centroid_path_distance_samples",
+    ],
     "overwrite_existing": False,
     "fire_wui_distance_miles": 3.0,
 }
