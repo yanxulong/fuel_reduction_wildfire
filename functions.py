@@ -1,4 +1,10 @@
-"""Shared filesystem and reporting helpers for workflow tasks."""
+"""Shared helpers for workflow tasks.
+
+Contents:
+- ensure_dir: create output directory tree
+- write_csv: write CSV atomically
+- should_skip, skip_task: skip-if-existing logic and log message
+"""
 
 from __future__ import annotations
 
@@ -46,9 +52,3 @@ def skip_task(name: str, *paths: Path) -> None:
     """Log existing outputs when shared skip-if-present logic skips a task."""
     targets = ", ".join(str(path) for path in paths)
     print(f"[skip] {name}: existing targets: {targets}")
-
-
-def sql_list(values) -> str:
-    """Format values as safely quoted SQL literals for GDAL/OGR filters."""
-    clean = [str(value).replace("'", "''") for value in values]
-    return "(" + ",".join(f"'{value}'" for value in clean) + ")"

@@ -11,7 +11,7 @@ import initialization
 
 
 CONFIG = {
-    "enabled_tasks": ["validate_project_layout"],
+    "enabled_tasks": ["build_wui_singlepart_dataset"],
     "overwrite_existing": False,
 }
 
@@ -56,7 +56,7 @@ def main() -> int:
 
     initialization.build_task_tree(project, config)
     project.execute()
-    print(f"[complete] Workflow finished. Status report: {project.paths['configuration_status']}")
+    print("[complete] Workflow finished.")
     return 0
 
 
