@@ -40,3 +40,15 @@ def should_skip(overwrite_existing: bool, paths: Iterable[Path]) -> bool:
     return bool(targets) and not overwrite_existing and all(
         path.exists() and path.stat().st_size > 0 for path in targets
     )
+
+
+def skip_task(name: str, *paths: Path) -> None:
+    """Log existing outputs when shared skip-if-present logic skips a task."""
+    targets = ", ".join(str(path) for path in paths)
+    print(f"[skip] {name}: existing targets: {targets}")
+
+
+def sql_list(values) -> str:
+    """Format values as safely quoted SQL literals for GDAL/OGR filters."""
+    clean = [str(value).replace("'", "''") for value in values]
+    return "(" + ",".join(f"'{value}'" for value in clean) + ")"
