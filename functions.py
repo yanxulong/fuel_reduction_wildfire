@@ -14,20 +14,21 @@ from __future__ import annotations
 import multiprocessing
 import csv
 import os
+import sys
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
 
 def configure_geospatial_environment() -> Path | None:
     """Point geospatial libraries at the active Conda environment's data files."""
-    prefix = os.environ.get("CONDA_PREFIX")
-    if not prefix:
-        return None
+    prefix = os.environ.get("CONDA_PREFIX") or sys.prefix
 
     proj_dir = Path(prefix) / "share" / "proj"
     proj_database = proj_dir / "proj.db"
     if not proj_database.is_file():
-        raise FileNotFoundError(f"PROJ database missing: {proj_database}")
+        if os.environ.get("CONDA_PREFIX"):
+            raise FileNotFoundError(f"PROJ database missing: {proj_database}")
+        return None
 
     os.environ["PROJ_LIB"] = str(proj_dir)
     os.environ["PROJ_DATA"] = str(proj_dir)

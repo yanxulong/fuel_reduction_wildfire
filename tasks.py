@@ -302,21 +302,30 @@ def build_fire_wui_centroid_paths(project):
         (field for field in point_fields if field.casefold() in {"year", "fire_year"}),
         None,
     )
-    if year_field is None:
+    ignition_date_field = next(
+        (field for field in point_fields if field.casefold() in {"ig_date", "ignition_date"}),
+        None,
+    )
+    if year_field is None and ignition_date_field is None:
         raise ValueError(
-            f"Fire point source lacks a YEAR/FIRE_YEAR field: {source_points}. "
+            f"Fire point source lacks YEAR/FIRE_YEAR or IG_DATE/IGNITION_DATE field: {source_points}. "
             f"Available fields: {point_fields}"
         )
     point_crs = point_info.get("crs")
     if point_crs is None:
         raise ValueError(f"Fire point source has no CRS: {source_points}")
     tqdm.write(f"[progress] Fire points: reading {source_points}")
-    tqdm.write(f"[progress] Fire year field: {year_field}")
+    year_source_field = year_field or ignition_date_field
+    tqdm.write(f"[progress] Fire year source field: {year_source_field}")
     fires = gpd.read_file(source_points, use_arrow=True)
     if fires.empty:
         raise RuntimeError(f"Fire point source contains no records: {source_points}")
     fires["_fire_source_row_number"] = np.arange(1, len(fires) + 1, dtype=np.int64)
-    fires["_fire_year_numeric"] = pd.to_numeric(fires[year_field], errors="coerce").astype("Int64")
+    if year_field is not None:
+        fire_years = pd.to_numeric(fires[year_field], errors="coerce")
+    else:
+        fire_years = pd.to_datetime(fires[ignition_date_field], errors="coerce").dt.year
+    fires["_fire_year_numeric"] = fire_years.astype("Int64")
     no_year_count = int(fires["_fire_year_numeric"].isna().sum())
     fires = fires.loc[fires["_fire_year_numeric"].notna() & fires.geometry.notna() & ~fires.geometry.is_empty].copy()
     fires["_fire_year_numeric"] = fires["_fire_year_numeric"].astype("int32")
