@@ -24,6 +24,7 @@ def build_wui_singlepart_dataset(project):
     import pyogrio
     import shapely
     from pyproj import CRS
+    from tqdm import tqdm
 
     years = (2000, 2010, 2020)
     chunk_size = 100_000
@@ -97,6 +98,13 @@ def build_wui_singlepart_dataset(project):
             metadata = metadata_by_year[year]
             geometry_column = metadata["geometry_name"] or "wkb_geometry"
             crs_text = str(metadata["crs"])
+            try:
+                feature_count = int(metadata.get("features"))
+            except (TypeError, ValueError):
+                feature_count = -1
+            total_batches = (
+                (feature_count + chunk_size - 1) // chunk_size if feature_count >= 0 else None
+            )
             year_dir = temporary_dir / f"year_{year}"
             year_dir.mkdir(parents=True, exist_ok=True)
             source_rows = 0
@@ -104,93 +112,103 @@ def build_wui_singlepart_dataset(project):
             dropped_nonpolygon_components = 0
             part_file_number = 0
             row_number_offset = 0
-            batch_number = 0
 
-            print(f"[progress] WUI {year}: reading {path}", flush=True)
+            tqdm.write(f"[progress] WUI {year}: reading {path}")
 
             with pyogrio.open_arrow(
                 path,
                 use_pyarrow=True,
                 batch_size=chunk_size,
             ) as (_, reader):
-                for batch in reader:
-                    batch_number += 1
-                    attributes = batch.to_pandas()
-                    if geometry_column not in attributes:
-                        raise ValueError(f"Could not find geometry column {geometry_column!r} in {path}")
-                    wkb = attributes.pop(geometry_column)
-                    batch_rows = len(attributes)
-                    if batch_rows == 0:
-                        continue
-                    source_rows += batch_rows
-                    row_numbers = np.arange(
-                        row_number_offset + 1,
-                        row_number_offset + batch_rows + 1,
-                        dtype=np.int64,
-                    )
-                    row_number_offset += batch_rows
-                    attributes["wui_source_row_number"] = row_numbers
-                    print(
-                        f"[progress] WUI {year}: batch {batch_number}; "
-                        f"source rows={source_rows:,}; parts={single_part_rows:,}",
-                        flush=True,
-                    )
-                    geometries = shapely.from_wkb(wkb.to_numpy())
-                    frame = gpd.GeoDataFrame(attributes, geometry=geometries, crs=crs_text)
-                    invalid = ~frame.geometry.is_valid
-                    if invalid.any():
-                        frame.loc[invalid, "geometry"] = shapely.make_valid(
-                            frame.loc[invalid, "geometry"].to_numpy()
+                with tqdm(
+                    total=total_batches,
+                    desc=f"WUI {year}",
+                    unit="batch",
+                    dynamic_ncols=True,
+                ) as progress:
+                    def advance_progress():
+                        progress.set_postfix(
+                            rows=f"{source_rows:,}",
+                            parts=f"{single_part_rows:,}",
+                            shards=part_file_number,
+                            refresh=False,
                         )
-                    frame = frame.loc[~frame.geometry.isna() & ~frame.geometry.is_empty].copy()
-                    if frame.empty:
-                        continue
+                        progress.update(1)
 
-                    parts = frame.explode(index_parts=False).reset_index(drop=True)
-                    polygon_mask = parts.geom_type.eq("Polygon")
-                    dropped_nonpolygon_components += int((~polygon_mask).sum())
-                    parts = parts.loc[polygon_mask].copy()
-                    if parts.empty:
-                        continue
-                    parts["wui_single_part_number"] = (
-                        parts.groupby("wui_source_row_number", sort=False, observed=True).cumcount() + 1
-                    ).astype("int32")
+                    for batch in reader:
+                        attributes = batch.to_pandas()
+                        if geometry_column not in attributes:
+                            raise ValueError(f"Could not find geometry column {geometry_column!r} in {path}")
+                        wkb = attributes.pop(geometry_column)
+                        batch_rows = len(attributes)
+                        if batch_rows == 0:
+                            advance_progress()
+                            continue
+                        source_rows += batch_rows
+                        row_numbers = np.arange(
+                            row_number_offset + 1,
+                            row_number_offset + batch_rows + 1,
+                            dtype=np.int64,
+                        )
+                        row_number_offset += batch_rows
+                        attributes["wui_source_row_number"] = row_numbers
+                        geometries = shapely.from_wkb(wkb.to_numpy())
+                        frame = gpd.GeoDataFrame(attributes, geometry=geometries, crs=crs_text)
+                        invalid = ~frame.geometry.is_valid
+                        if invalid.any():
+                            frame.loc[invalid, "geometry"] = shapely.make_valid(
+                                frame.loc[invalid, "geometry"].to_numpy()
+                            )
+                        frame = frame.loc[~frame.geometry.isna() & ~frame.geometry.is_empty].copy()
+                        if frame.empty:
+                            advance_progress()
+                            continue
 
-                    for field in source_fields:
-                        if field not in parts:
-                            parts[field] = pd.NA
-                        kinds = field_kinds.get(field, set())
-                        if kinds.intersection({"O", "S", "U"}):
-                            parts[field] = parts[field].astype("string")
-                        elif "f" in kinds:
-                            parts[field] = pd.to_numeric(parts[field], errors="coerce").astype("Float64")
-                        elif kinds.intersection({"i", "u", "b"}):
-                            parts[field] = pd.to_numeric(parts[field], errors="coerce").astype("Int64")
-                    parts["year"] = year
-                    parts["wui_single_part_id"] = (
-                        str(year)
-                        + "_"
-                        + parts["wui_source_row_number"].astype("string")
-                        + "_"
-                        + parts["wui_single_part_number"].astype("string")
-                    )
-                    parts = parts[output_fields]
-                    out_part = year_dir / f"part-{part_file_number:06d}.parquet"
-                    print(
-                        f"[progress] WUI {year}: writing shard {part_file_number + 1} "
-                        f"({len(parts):,} single parts)",
-                        flush=True,
-                    )
-                    parts.to_parquet(out_part, index=False, compression="zstd")
-                    part_file_number += 1
-                    single_part_rows += len(parts)
+                        parts = frame.explode(index_parts=False).reset_index(drop=True)
+                        polygon_mask = parts.geom_type.eq("Polygon")
+                        dropped_nonpolygon_components += int((~polygon_mask).sum())
+                        parts = parts.loc[polygon_mask].copy()
+                        if parts.empty:
+                            advance_progress()
+                            continue
+                        parts["wui_single_part_number"] = (
+                            parts.groupby("wui_source_row_number", sort=False, observed=True).cumcount() + 1
+                        ).astype("int32")
+
+                        for field in source_fields:
+                            if field not in parts:
+                                parts[field] = pd.NA
+                            kinds = field_kinds.get(field, set())
+                            if kinds.intersection({"O", "S", "U"}):
+                                parts[field] = parts[field].astype("string")
+                            elif "f" in kinds:
+                                parts[field] = pd.to_numeric(parts[field], errors="coerce").astype("Float64")
+                            elif kinds.intersection({"i", "u", "b"}):
+                                parts[field] = pd.to_numeric(parts[field], errors="coerce").astype("Int64")
+                        parts["year"] = year
+                        parts["wui_single_part_id"] = (
+                            str(year)
+                            + "_"
+                            + parts["wui_source_row_number"].astype("string")
+                            + "_"
+                            + parts["wui_single_part_number"].astype("string")
+                        )
+                        parts = parts[output_fields]
+                        out_part = year_dir / f"part-{part_file_number:06d}.parquet"
+                        tqdm.write(
+                            f"[progress] WUI {year}: writing shard {part_file_number + 1} "
+                            f"({len(parts):,} single parts)",
+                        )
+                        parts.to_parquet(out_part, index=False, compression="zstd")
+                        part_file_number += 1
+                        single_part_rows += len(parts)
+                        advance_progress()
 
             if source_rows == 0 or single_part_rows == 0:
                 raise RuntimeError(f"No WUI polygon records processed for vintage {year}: {path}")
-            print(
+            tqdm.write(
                 f"[progress] WUI {year}: complete; source rows={source_rows:,}; "
-                f"single parts={single_part_rows:,}; shards={part_file_number}",
-                flush=True,
+                f"single parts={single_part_rows:,}; shards={part_file_number}"
             )
             summary_rows.append(
                 {
