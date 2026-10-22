@@ -12,6 +12,7 @@ import tasks
 TASK_REGISTRY: dict[str, Callable] = {
     "build_wui_singlepart_dataset": tasks.build_wui_singlepart_dataset,
     "build_fire_wui_centroid_paths": tasks.build_fire_wui_centroid_paths,
+    "build_fire_wui_centroid_path_distance_samples": tasks.build_fire_wui_centroid_path_distance_samples,
 }
 
 

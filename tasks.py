@@ -3,6 +3,7 @@
 Contents:
 - build_wui_singlepart_dataset: combine 2000, 2010, and 2020 WUI blocks as single-part records
 - build_fire_wui_centroid_paths: link MTBS fire centroids to WUI single-part edges within a configurable radius
+- build_fire_wui_centroid_path_distance_samples: build path datasets for 1 to 10 miles
 """
 
 from __future__ import annotations
@@ -533,4 +534,32 @@ def build_fire_wui_centroid_paths(project):
         "path_rows": total_paths,
         "matched_fire_points": len(matched_fire_rows),
         "distance_miles": distance_miles,
+    }
+
+
+def build_fire_wui_centroid_path_distance_samples(project):
+    """Build resumable fire-to-WUI path datasets for distances from 1 to 10 miles."""
+    distances_miles = tuple(round(1.0 + 0.5 * index, 1) for index in range(19))
+    configured_distance = project.config.get("fire_wui_distance_miles", 3.0)
+    results = []
+    try:
+        for index, distance_miles in enumerate(distances_miles, start=1):
+            print(
+                f"[progress] Distance sample {index}/{len(distances_miles)}: "
+                f"{distance_miles:g} miles"
+            )
+            project.config["fire_wui_distance_miles"] = distance_miles
+            results.append(build_fire_wui_centroid_paths(project))
+    finally:
+        project.config["fire_wui_distance_miles"] = configured_distance
+
+    built = sum(result["status"] == "built" for result in results)
+    skipped = sum(result["status"] == "skipped" for result in results)
+    print(f"[result] distance samples built={built}; skipped={skipped}")
+    return {
+        "status": "built" if built else "skipped",
+        "distances_miles": distances_miles,
+        "built": built,
+        "skipped": skipped,
+        "samples": results,
     }
