@@ -677,15 +677,52 @@ def build_wui_annual_mtbs_outcomes(project):
         (field for field in perimeter_info["fields"] if field.casefold() in {"year", "fire_year"}),
         None,
     )
-    if perimeter_year_field is None:
+    perimeter_ignition_date_field = next(
+        (field for field in perimeter_info["fields"] if field.casefold() in {"ig_date", "ignition_date"}),
+        None,
+    )
+    if perimeter_year_field is None and perimeter_ignition_date_field is None:
         raise ValueError(
-            f"MTBS perimeter layer lacks YEAR/FIRE_YEAR: {perimeter_path}; "
+            f"MTBS perimeter layer lacks YEAR/FIRE_YEAR or IG_DATE/IGNITION_DATE: {perimeter_path}; "
             f"fields={list(perimeter_info['fields'])}"
         )
+    year_source_field = perimeter_year_field or perimeter_ignition_date_field
+    year_source_label = "year field" if perimeter_year_field else "ignition-date field"
+    tqdm.write(f"[progress] MTBS fire year source: {year_source_field} ({year_source_label})")
     tqdm.write(f"[progress] MTBS burned-area boundaries: reading {perimeter_path}")
-    perimeters = gpd.read_file(perimeter_path, columns=[perimeter_year_field], use_arrow=True)
-    perimeters["_outcome_year"] = pd.to_numeric(perimeters[perimeter_year_field], errors="coerce")
+    perimeters = gpd.read_file(perimeter_path, columns=[year_source_field], use_arrow=True)
+    if perimeter_year_field:
+        perimeters["_outcome_year"] = pd.to_numeric(perimeters[perimeter_year_field], errors="coerce")
+    else:
+        date_values = perimeters[perimeter_ignition_date_field].astype("string").str.strip()
+        compact_dates = date_values.str.fullmatch(r"\d{8}", na=False)
+        parsed_dates = pd.to_datetime(date_values.mask(compact_dates), errors="coerce")
+        if compact_dates.any():
+            parsed_dates.loc[compact_dates] = pd.to_datetime(
+                date_values.loc[compact_dates], format="%Y%m%d", errors="coerce"
+            )
+        perimeters["_outcome_year"] = parsed_dates.dt.year
+
+    geometry_types = set(perimeters.geometry.geom_type.dropna().unique())
+    unsupported_geometry_types = geometry_types.difference({"Polygon", "MultiPolygon"})
+    if not geometry_types or unsupported_geometry_types:
+        raise ValueError(
+            f"MTBS burned-area boundaries must contain polygon geometries; "
+            f"found {sorted(geometry_types)} in {perimeter_path}"
+        )
+    invalid_year_count = int(perimeters["_outcome_year"].isna().sum())
+    if invalid_year_count:
+        tqdm.write(f"[warning] Dropping {invalid_year_count:,} perimeters with unparseable fire year")
     perimeters = perimeters.loc[perimeters["_outcome_year"].between(2000, 2024)].copy()
+    if perimeters.empty:
+        raise ValueError(
+            f"No MTBS perimeter records with valid fire years 2000-2024 in {perimeter_path}"
+        )
+    tqdm.write(
+        f"[progress] Retained {len(perimeters):,} polygon records; "
+        f"fire years {int(perimeters['_outcome_year'].min())}-"
+        f"{int(perimeters['_outcome_year'].max())}"
+    )
     perimeters = perimeters.to_crs(5070)
     perimeter_parts_by_year = {}
     perimeter_trees_by_year = {}
