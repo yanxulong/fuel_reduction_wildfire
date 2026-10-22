@@ -341,7 +341,7 @@ def build_fire_wui_centroid_paths(project):
     fires = fires.loc[fires["_fire_wui_vintage"] > 0].copy()
     if fires.empty:
         raise RuntimeError("No MTBS fire points fall in 2000 or later, required for WUI vintage matching")
-    compute = functions.inspect_compute_capacity(memory_per_worker_gib=4.0, max_workers=8)
+    compute = functions.inspect_compute_capacity(memory_per_worker_gib=8.0, max_workers=32)
     workers = int(compute["workers"])
 
     source_fields = [field for field in point_fields if field in fires.columns]
