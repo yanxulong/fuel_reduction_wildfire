@@ -11,6 +11,7 @@ import tasks
 
 TASK_REGISTRY: dict[str, Callable] = {
     "validate_project_layout": tasks.validate_project_layout,
+    "build_wui_singlepart_fireface_regression_data": tasks.build_wui_singlepart_fireface_regression_data,
 }
 
 
@@ -54,6 +55,22 @@ def initialize_paths(project: LocalProjectFlow, config: dict[str, object] | None
         "project_root": project_root,
         "data": project_root / "data",
         "raw": project_root / "data" / "raw",
+        "treatment_polygons": (
+            project_root / "data" / "raw" / "FACTS" / "Actv_HazFuelTrt_PL" / "Actv_HazFuelTrt_PL.shp"
+        ),
+        "mtbs_perimeters": project_root / "data" / "raw" / "MTBS" / "mtbs_perims_DD.shp",
+        "mtbs_fod_points": (
+            project_root / "data" / "raw" / "MTBS" / "mtbs_fod_pts_data" / "mtbs_FODpoints_DD.shp"
+        ),
+        "mtbs_bsmosaics": project_root / "data" / "raw" / "MTBS" / "MTBS_BSmosaics",
+        "wui_geodatabase": (
+            project_root
+            / "data"
+            / "raw"
+            / "silvis_wui"
+            / "CONUS_wui_block_1990_2020_change_v4_fgdb"
+            / "CONUS_WUI_block_1990_2020_change_v4_web.gdb"
+        ),
         "processed": project_root / "data" / "processed",
         "data_archive": project_root / "data" / "archive",
         "project": project_dir,

@@ -32,3 +32,11 @@ def write_csv(
     finally:
         temporary_path.unlink(missing_ok=True)
     return path
+
+
+def should_skip(overwrite_existing: bool, paths: Iterable[Path]) -> bool:
+    """Skip task when every nonempty output already exists and overwrite is off."""
+    targets = list(paths)
+    return bool(targets) and not overwrite_existing and all(
+        path.exists() and path.stat().st_size > 0 for path in targets
+    )

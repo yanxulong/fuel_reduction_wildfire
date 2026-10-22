@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import functions
+from wui_singlepart import build_wui_singlepart_fireface_regression_data
 
 
 def validate_project_layout(project) -> dict[str, object]:

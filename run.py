@@ -12,6 +12,7 @@ import initialization
 
 CONFIG = {
     "enabled_tasks": ["validate_project_layout"],
+    "overwrite_existing": False,
 }
 
 
