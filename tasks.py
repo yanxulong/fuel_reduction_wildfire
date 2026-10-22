@@ -24,7 +24,6 @@ def build_wui_singlepart_dataset(project):
     from pyproj import CRS
 
     years = (2000, 2010, 2020)
-    fire_periods = {2000: (2000, 2009), 2010: (2010, 2019), 2020: (2020, 2024)}
     chunk_size = 100_000
     input_paths = {year: project.paths[f"wui_by_year_{year}"] for year in years}
     output_dir = project.paths["wui_singlepart_dataset"]
@@ -50,8 +49,6 @@ def build_wui_singlepart_dataset(project):
     metadata_by_year = {}
     reserved_fields = {
         "year",
-        "fire_year_start",
-        "fire_year_end",
         "wui_source_row_number",
         "wui_single_part_number",
         "wui_single_part_id",
@@ -82,8 +79,6 @@ def build_wui_singlepart_dataset(project):
     output_fields = [
         *source_fields,
         "year",
-        "fire_year_start",
-        "fire_year_end",
         "wui_source_row_number",
         "wui_single_part_number",
         "wui_single_part_id",
@@ -161,7 +156,6 @@ def build_wui_singlepart_dataset(project):
                         elif kinds.intersection({"i", "u", "b"}):
                             parts[field] = pd.to_numeric(parts[field], errors="coerce").astype("Int64")
                     parts["year"] = year
-                    parts["fire_year_start"], parts["fire_year_end"] = fire_periods[year]
                     parts["wui_single_part_id"] = (
                         str(year)
                         + "_"
@@ -180,8 +174,6 @@ def build_wui_singlepart_dataset(project):
             summary_rows.append(
                 {
                     "year": year,
-                    "fire_year_start": fire_periods[year][0],
-                    "fire_year_end": fire_periods[year][1],
                     "source_path": str(path),
                     "source_rows": source_rows,
                     "single_part_rows": single_part_rows,
@@ -197,8 +189,6 @@ def build_wui_singlepart_dataset(project):
             temporary_summary,
             fieldnames=(
                 "year",
-                "fire_year_start",
-                "fire_year_end",
                 "source_path",
                 "source_rows",
                 "single_part_rows",
