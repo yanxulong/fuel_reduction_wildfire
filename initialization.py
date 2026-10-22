@@ -13,6 +13,7 @@ TASK_REGISTRY: dict[str, Callable] = {
     "build_wui_singlepart_dataset": tasks.build_wui_singlepart_dataset,
     "build_fire_wui_centroid_paths": tasks.build_fire_wui_centroid_paths,
     "build_fire_wui_centroid_path_distance_samples": tasks.build_fire_wui_centroid_path_distance_samples,
+    "build_wui_annual_mtbs_outcomes": tasks.build_wui_annual_mtbs_outcomes,
 }
 
 
@@ -69,6 +70,15 @@ def initialize_paths(project: LocalProjectFlow, config: dict[str, object] | None
             project_root / "data" / "archive" / "raw" / "MTBS" / "mtbs_fod_pts_data" / "mtbs_FODpoints_DD.shp",
             project_root / "data" / "archive" / "raw" / "MTBS" / "mtbs_FODpoints_DD.shp",
         ),
+        "mtbs_perimeter_candidates": (
+            project_root / "data" / "raw" / "MTBS" / "mtbs_perims_DD.shp",
+            project_root / "data" / "raw" / "MTBS" / "MTBS_Burn_Area" / "mtbs_perims_DD.shp",
+            project_root / "data" / "archive" / "raw" / "MTBS" / "mtbs_perims_DD.shp",
+            project_root / "data" / "archive" / "raw" / "MTBS" / "MTBS_Burn_Area" / "mtbs_perims_DD.shp",
+        ),
+        "mtbs_severity_raster_root": project_root / "data" / "raw" / "MTBS" / "MTBS_BSmosaics",
+        "wui_annual_mtbs_outcomes": project_root / "data" / "processed" / "wui_annual_mtbs_outcomes",
+        "wui_annual_mtbs_outcomes_summary": output_dir / "tables" / "wui_annual_mtbs_outcomes_summary.csv",
         "data_archive": project_root / "data" / "archive",
         "project": project_dir,
         "intermediate": project_dir / "intermediate",

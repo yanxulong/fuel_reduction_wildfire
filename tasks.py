@@ -4,6 +4,7 @@ Contents:
 - build_wui_singlepart_dataset: combine 2000, 2010, and 2020 WUI blocks as single-part records
 - build_fire_wui_centroid_paths: link MTBS fire centroids to WUI single-part edges within a configurable radius
 - build_fire_wui_centroid_path_distance_samples: build path datasets for 1 to 10 miles
+- build_wui_annual_mtbs_outcomes: calculate annual burn, area, and severity for WUI single parts
 """
 
 from __future__ import annotations
@@ -562,4 +563,292 @@ def build_fire_wui_centroid_path_distance_samples(project):
         "built": built,
         "skipped": skipped,
         "samples": results,
+    }
+
+
+def build_wui_annual_mtbs_outcomes(project):
+    """Build annual WUI single-part outcomes from MTBS burn boundaries and severity mosaics."""
+    functions.configure_geospatial_environment()
+
+    import os
+    import shutil
+    import tempfile
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from pathlib import Path
+
+    import geopandas as gpd
+    import numpy as np
+    import pandas as pd
+    import pyogrio
+    import rasterio
+    import shapely
+    from rasterio.features import geometry_mask
+    from rasterio.windows import Window, from_bounds
+    from rasterio.errors import WindowError
+    from shapely.geometry import mapping
+    from tqdm import tqdm
+
+    years_by_vintage = {
+        2000: tuple(range(2000, 2010)),
+        2010: tuple(range(2010, 2020)),
+        2020: tuple(range(2020, 2025)),
+    }
+    singlepart_root = project.paths["wui_singlepart_dataset"]
+    output_dir = project.paths["wui_annual_mtbs_outcomes"]
+    summary_path = project.paths["wui_annual_mtbs_outcomes_summary"]
+    perimeter_candidates = project.paths["mtbs_perimeter_candidates"]
+    perimeter_path = next(
+        (Path(path) for path in perimeter_candidates if Path(path).is_file() and Path(path).stat().st_size > 0),
+        None,
+    )
+    if perimeter_path is None:
+        raise FileNotFoundError(f"No MTBS burned-area boundary shapefile found: {perimeter_candidates}")
+
+    overwrite = bool(project.config.get("overwrite_existing", False))
+    if functions.should_skip(overwrite, [output_dir, summary_path]):
+        functions.skip_task("build_wui_annual_mtbs_outcomes", output_dir, summary_path)
+        return {"status": "skipped", "dataset": output_dir, "summary": summary_path}
+    if output_dir.exists() and not overwrite:
+        raise FileExistsError(
+            f"Outcome directory exists without complete summary: {output_dir}. "
+            "Set overwrite_existing=True to rebuild it."
+        )
+    if not singlepart_root.is_dir():
+        raise FileNotFoundError(
+            f"Missing WUI single-part dataset: {singlepart_root}. Run build_wui_singlepart_dataset first."
+        )
+
+    raster_paths = {
+        year: project.paths["mtbs_severity_raster_root"] / str(year) / f"mtbs_CONUS_{year}.tif"
+        for years in years_by_vintage.values()
+        for year in years
+    }
+    missing_rasters = [str(path) for path in raster_paths.values() if not path.is_file() or path.stat().st_size == 0]
+    if missing_rasters:
+        raise FileNotFoundError(
+            "Missing annual MTBS CONUS burn-severity mosaics for 2000-2024:\n  "
+            + "\n  ".join(missing_rasters)
+        )
+
+    perimeter_info = pyogrio.read_info(perimeter_path)
+    perimeter_year_field = next(
+        (field for field in perimeter_info["fields"] if field.casefold() in {"year", "fire_year"}),
+        None,
+    )
+    if perimeter_year_field is None:
+        raise ValueError(
+            f"MTBS perimeter layer lacks YEAR/FIRE_YEAR: {perimeter_path}; "
+            f"fields={list(perimeter_info['fields'])}"
+        )
+    tqdm.write(f"[progress] MTBS burned-area boundaries: reading {perimeter_path}")
+    perimeters = gpd.read_file(perimeter_path, columns=[perimeter_year_field], use_arrow=True)
+    perimeters["_outcome_year"] = pd.to_numeric(perimeters[perimeter_year_field], errors="coerce")
+    perimeters = perimeters.loc[perimeters["_outcome_year"].between(2000, 2024)].copy()
+    perimeters = perimeters.to_crs(5070)
+    perimeter_parts_by_year = {}
+    perimeter_trees_by_year = {}
+    for year in range(2000, 2025):
+        annual_geometries = perimeters.loc[perimeters["_outcome_year"].eq(year)].geometry.to_numpy()
+        if len(annual_geometries):
+            dissolved = shapely.union_all(annual_geometries)
+            parts = np.asarray(shapely.get_parts(dissolved), dtype=object)
+            parts = parts[~shapely.is_empty(parts)]
+        else:
+            parts = np.empty(0, dtype=object)
+        perimeter_parts_by_year[year] = parts
+        perimeter_trees_by_year[year] = shapely.STRtree(parts) if len(parts) else None
+
+    for year, path in raster_paths.items():
+        with rasterio.open(path) as src:
+            if src.crs is None or src.crs.to_epsg() != 5070:
+                raise ValueError(f"Expected EPSG:5070 MTBS severity raster; got {src.crs}: {path}")
+            if src.count != 1:
+                raise ValueError(f"Expected single-band MTBS severity raster; found {src.count}: {path}")
+    compute = functions.inspect_compute_capacity(memory_per_worker_gib=8.0, max_workers=32)
+    workers = int(compute["workers"])
+    functions.ensure_dir(output_dir.parent)
+    functions.ensure_dir(summary_path.parent)
+    temporary_dir = Path(tempfile.mkdtemp(prefix=".wui_mtbs_outcomes.", dir=output_dir.parent))
+    temporary_summary = summary_path.with_name(f".{summary_path.name}.{os.getpid()}.tmp")
+
+    def severity_counts(src, geometry):
+        bounds_window = from_bounds(*geometry.bounds, transform=src.transform)
+        bounds_window = bounds_window.round_offsets().round_lengths()
+        raster_window = Window(0, 0, src.width, src.height)
+        try:
+            window = bounds_window.intersection(raster_window)
+        except WindowError:
+            return np.zeros(7, dtype=np.int64)
+        if window.width <= 0 or window.height <= 0:
+            return np.zeros(7, dtype=np.int64)
+        counts = np.zeros(7, dtype=np.int64)
+        chunk_rows = 512
+        chunk_columns = 2048
+        row_end = int(window.row_off + window.height)
+        column_end = int(window.col_off + window.width)
+        for row_start in range(int(window.row_off), row_end, chunk_rows):
+            height = min(chunk_rows, row_end - row_start)
+            for column_start in range(int(window.col_off), column_end, chunk_columns):
+                width = min(chunk_columns, column_end - column_start)
+                chunk_window = Window(column_start, row_start, width, height)
+                values = src.read(1, window=chunk_window, boundless=False)
+                inside = geometry_mask(
+                    [mapping(geometry)],
+                    out_shape=values.shape,
+                    transform=src.window_transform(chunk_window),
+                    invert=True,
+                    all_touched=False,
+                )
+                selected = values[inside]
+                if selected.size:
+                    counts += np.bincount(selected.astype(np.int64), minlength=7)[:7]
+        return counts
+
+    def process_wui_shard(task):
+        wui_vintage, shard_index, input_path = task
+        wui = gpd.read_parquet(input_path)
+        required = {"wui_single_part_id", "wui_source_row_number", "wui_single_part_number", "year"}
+        missing = sorted(required.difference(wui.columns))
+        if missing:
+            raise ValueError(f"WUI shard lacks required fields {missing}: {input_path}")
+        if not wui.empty and not wui["year"].eq(wui_vintage).all():
+            raise ValueError(f"WUI vintage mismatch, expected {wui_vintage}: {input_path}")
+        if wui.crs is None:
+            raise ValueError(f"WUI shard has no CRS: {input_path}")
+        wui = wui.to_crs(5070).reset_index(drop=True)
+        wui_geometries = wui.geometry.to_numpy()
+        output_rows = []
+        for year in years_by_vintage[wui_vintage]:
+            burned_area_m2 = np.zeros(len(wui), dtype=np.float64)
+            tree = perimeter_trees_by_year[year]
+            parts = perimeter_parts_by_year[year]
+            if tree is not None and len(wui):
+                pairs = tree.query(wui_geometries, predicate="intersects")
+                if pairs.size:
+                    wui_idx, perimeter_idx = pairs
+                    intersections = shapely.intersection(
+                        wui_geometries[wui_idx], parts[perimeter_idx]
+                    )
+                    intersection_areas = shapely.area(intersections)
+                    positive = intersection_areas > 0
+                    if positive.any():
+                        burned_area_m2 = np.bincount(
+                            wui_idx[positive],
+                            weights=intersection_areas[positive],
+                            minlength=len(wui),
+                        )
+            any_burn = burned_area_m2 > 0
+            class_counts = np.zeros((len(wui), 7), dtype=np.int64)
+            severity_path = raster_paths[year]
+            with rasterio.open(severity_path) as src:
+                for wui_idx in np.flatnonzero(any_burn):
+                    class_counts[wui_idx] = severity_counts(src, wui_geometries[wui_idx])
+
+            valid_severity = class_counts[:, 1:5].sum(axis=1)
+            weighted_classes = (class_counts[:, 1:5] * np.arange(1, 5)).sum(axis=1)
+            mean_severity = np.divide(
+                weighted_classes,
+                valid_severity,
+                out=np.full(len(wui), np.nan, dtype=np.float64),
+                where=valid_severity > 0,
+            )
+            high_share = np.divide(
+                class_counts[:, 4],
+                valid_severity,
+                out=np.full(len(wui), np.nan, dtype=np.float64),
+                where=valid_severity > 0,
+            )
+            rows = wui.drop(columns=wui.geometry.name).copy()
+            rows = rows.rename(columns={"year": "wui_vintage_year"})
+            rows["year"] = year
+            rows["any_burn"] = any_burn.astype("int8")
+            rows["burn_area_acres"] = burned_area_m2 / 4046.8564224
+            rows["log1p_burn_area_acres"] = np.log1p(rows["burn_area_acres"])
+            rows["mean_mtbs_severity_class_1_4"] = mean_severity
+            rows["high_severity_share"] = high_share
+            rows["severity_valid_pixels"] = valid_severity
+            rows["severity_class_1_pixels"] = class_counts[:, 1]
+            rows["severity_class_2_pixels"] = class_counts[:, 2]
+            rows["severity_class_3_pixels"] = class_counts[:, 3]
+            rows["severity_class_4_pixels"] = class_counts[:, 4]
+            rows["increased_greenness_pixels"] = class_counts[:, 5]
+            rows["nonprocessing_pixels"] = class_counts[:, 6]
+            rows["severity_valid_acres"] = valid_severity * (900.0 / 4046.8564224)
+            target = temporary_dir / f"year_{year}" / f"part-{shard_index:06d}.parquet"
+            functions.ensure_dir(target.parent)
+            rows.to_parquet(target, index=False, compression="zstd")
+            return {
+                "wui_vintage_year": wui_vintage,
+                "year": year,
+                "input_path": str(input_path),
+                "output_path": str(target),
+                "wui_single_parts": len(wui),
+                "outcome_rows": len(rows),
+                "burned_wui_parts": int(any_burn.sum()),
+                "burn_area_acres": float(rows["burn_area_acres"].sum()),
+                "severity_valid_pixels": int(valid_severity.sum()),
+            }
+
+    try:
+        tasks_to_run = []
+        for wui_vintage in years_by_vintage:
+            shard_paths = sorted((singlepart_root / f"year_{wui_vintage}").glob("part-*.parquet"))
+            if not shard_paths:
+                raise FileNotFoundError(
+                    f"No WUI single-part parquet shards found: {singlepart_root / f'year_{wui_vintage}'}"
+                )
+            tasks_to_run.extend(
+                (wui_vintage, shard_index, input_path)
+                for shard_index, input_path in enumerate(shard_paths)
+            )
+        summary_rows = []
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = [executor.submit(process_wui_shard, task) for task in tasks_to_run]
+            with tqdm(total=len(futures), desc="WUI–MTBS outcomes", unit="shard", dynamic_ncols=True) as progress:
+                for future in as_completed(futures):
+                    result = future.result()
+                    summary_rows.append(result)
+                    tqdm.write(
+                        f"[progress] WUI vintage {result['wui_vintage_year']} / fire year {result['year']}: "
+                        f"rows={result['outcome_rows']:,}; burned_parts={result['burned_wui_parts']:,}; "
+                        f"burn_acres={result['burn_area_acres']:,.1f}"
+                    )
+                    progress.update(1)
+
+        summary_rows.sort(key=lambda row: (row["year"], row["wui_vintage_year"], row["input_path"]))
+        functions.write_csv(
+            summary_rows,
+            temporary_summary,
+            fieldnames=(
+                "wui_vintage_year",
+                "year",
+                "input_path",
+                "output_path",
+                "wui_single_parts",
+                "outcome_rows",
+                "burned_wui_parts",
+                "burn_area_acres",
+                "severity_valid_pixels",
+            ),
+        )
+        if output_dir.exists():
+            shutil.rmtree(output_dir)
+        temporary_dir.replace(output_dir)
+        temporary_summary.replace(summary_path)
+    except BaseException:
+        shutil.rmtree(temporary_dir, ignore_errors=True)
+        temporary_summary.unlink(missing_ok=True)
+        raise
+
+    total_rows = sum(row["outcome_rows"] for row in summary_rows)
+    total_burned = sum(row["burned_wui_parts"] for row in summary_rows)
+    print(f"[output] Annual WUI–MTBS outcomes: {output_dir}")
+    print(f"[output] Outcome summary: {summary_path}")
+    print(f"[result] polygon-year rows={total_rows:,}; burned polygon-years={total_burned:,}")
+    return {
+        "status": "built",
+        "dataset": output_dir,
+        "summary": summary_path,
+        "outcome_rows": total_rows,
+        "burned_polygon_years": total_burned,
     }
