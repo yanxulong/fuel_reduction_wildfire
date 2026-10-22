@@ -591,7 +591,7 @@ def build_wui_annual_mtbs_outcomes(project):
     years_by_vintage = {
         2000: tuple(range(2000, 2010)),
         2010: tuple(range(2010, 2020)),
-        2020: tuple(range(2020, 2025)),
+        2020: tuple(range(2020, 2026)),
     }
     singlepart_root = project.paths["wui_singlepart_dataset"]
     output_dir = project.paths["wui_annual_mtbs_outcomes"]
@@ -668,7 +668,7 @@ def build_wui_annual_mtbs_outcomes(project):
     missing_rasters = [str(path) for path in raster_paths.values() if not path.is_file() or path.stat().st_size == 0]
     if missing_rasters:
         raise FileNotFoundError(
-            "Missing annual MTBS CONUS burn-severity mosaics for 2000-2024:\n  "
+            "Missing annual MTBS CONUS burn-severity mosaics for 2000-2025:\n  "
             + "\n  ".join(missing_rasters)
         )
 
@@ -713,10 +713,10 @@ def build_wui_annual_mtbs_outcomes(project):
     invalid_year_count = int(perimeters["_outcome_year"].isna().sum())
     if invalid_year_count:
         tqdm.write(f"[warning] Dropping {invalid_year_count:,} perimeters with unparseable fire year")
-    perimeters = perimeters.loc[perimeters["_outcome_year"].between(2000, 2024)].copy()
+    perimeters = perimeters.loc[perimeters["_outcome_year"].between(2000, 2025)].copy()
     if perimeters.empty:
         raise ValueError(
-            f"No MTBS perimeter records with valid fire years 2000-2024 in {perimeter_path}"
+            f"No MTBS perimeter records with valid fire years 2000-2025 in {perimeter_path}"
         )
     tqdm.write(
         f"[progress] Retained {len(perimeters):,} polygon records; "
@@ -726,7 +726,7 @@ def build_wui_annual_mtbs_outcomes(project):
     perimeters = perimeters.to_crs(5070)
     perimeter_parts_by_year = {}
     perimeter_trees_by_year = {}
-    for year in range(2000, 2025):
+    for year in range(2000, 2026):
         annual_geometries = perimeters.loc[perimeters["_outcome_year"].eq(year)].geometry.to_numpy()
         if len(annual_geometries):
             valid_mask = shapely.is_valid(annual_geometries)
@@ -827,7 +827,7 @@ def build_wui_annual_mtbs_outcomes(project):
             raise ValueError(f"WUI shard has no CRS: {input_path}")
         wui = wui.to_crs(5070).reset_index(drop=True)
         wui_geometries = wui.geometry.to_numpy()
-        output_rows = []
+        shard_results = []
         for year in years_by_vintage[wui_vintage]:
             burned_area_m2 = np.zeros(len(wui), dtype=np.float64)
             tree = perimeter_trees_by_year[year]
@@ -887,7 +887,7 @@ def build_wui_annual_mtbs_outcomes(project):
             target = temporary_dir / f"year_{year}" / f"part-{shard_index:06d}.parquet"
             functions.ensure_dir(target.parent)
             rows.to_parquet(target, index=False, compression="zstd")
-            return {
+            shard_results.append({
                 "wui_vintage_year": wui_vintage,
                 "year": year,
                 "input_path": str(input_path),
@@ -897,7 +897,8 @@ def build_wui_annual_mtbs_outcomes(project):
                 "burned_wui_parts": int(any_burn.sum()),
                 "burn_area_acres": float(rows["burn_area_acres"].sum()),
                 "severity_valid_pixels": int(valid_severity.sum()),
-            }
+            })
+        return shard_results
 
     try:
         tasks_to_run = []
@@ -914,16 +915,18 @@ def build_wui_annual_mtbs_outcomes(project):
         summary_rows = []
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = [executor.submit(process_wui_shard, task) for task in tasks_to_run]
-            with tqdm(total=len(futures), desc="WUI–MTBS outcomes", unit="shard", dynamic_ncols=True) as progress:
+            expected_year_shards = sum(len(years_by_vintage[task[0]]) for task in tasks_to_run)
+            with tqdm(total=expected_year_shards, desc="WUI–MTBS outcomes", unit="year-shard", dynamic_ncols=True) as progress:
                 for future in as_completed(futures):
-                    result = future.result()
-                    summary_rows.append(result)
-                    tqdm.write(
-                        f"[progress] WUI vintage {result['wui_vintage_year']} / fire year {result['year']}: "
-                        f"rows={result['outcome_rows']:,}; burned_parts={result['burned_wui_parts']:,}; "
-                        f"burn_acres={result['burn_area_acres']:,.1f}"
-                    )
-                    progress.update(1)
+                    shard_results = future.result()
+                    for result in shard_results:
+                        summary_rows.append(result)
+                        tqdm.write(
+                            f"[progress] WUI vintage {result['wui_vintage_year']} / fire year {result['year']}: "
+                            f"rows={result['outcome_rows']:,}; burned_parts={result['burned_wui_parts']:,}; "
+                            f"burn_acres={result['burn_area_acres']:,.1f}"
+                        )
+                        progress.update(1)
 
         summary_rows.sort(key=lambda row: (row["year"], row["wui_vintage_year"], row["input_path"]))
         functions.write_csv(
