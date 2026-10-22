@@ -298,17 +298,25 @@ def build_fire_wui_centroid_paths(project):
 
     point_info = pyogrio.read_info(source_points)
     point_fields = list(point_info["fields"])
-    if "YEAR" not in point_fields:
-        raise ValueError(f"Fire point source lacks required YEAR field: {source_points}")
+    year_field = next(
+        (field for field in point_fields if field.casefold() in {"year", "fire_year"}),
+        None,
+    )
+    if year_field is None:
+        raise ValueError(
+            f"Fire point source lacks a YEAR/FIRE_YEAR field: {source_points}. "
+            f"Available fields: {point_fields}"
+        )
     point_crs = point_info.get("crs")
     if point_crs is None:
         raise ValueError(f"Fire point source has no CRS: {source_points}")
     tqdm.write(f"[progress] Fire points: reading {source_points}")
+    tqdm.write(f"[progress] Fire year field: {year_field}")
     fires = gpd.read_file(source_points, use_arrow=True)
     if fires.empty:
         raise RuntimeError(f"Fire point source contains no records: {source_points}")
     fires["_fire_source_row_number"] = np.arange(1, len(fires) + 1, dtype=np.int64)
-    fires["_fire_year_numeric"] = pd.to_numeric(fires["YEAR"], errors="coerce").astype("Int64")
+    fires["_fire_year_numeric"] = pd.to_numeric(fires[year_field], errors="coerce").astype("Int64")
     no_year_count = int(fires["_fire_year_numeric"].isna().sum())
     fires = fires.loc[fires["_fire_year_numeric"].notna() & fires.geometry.notna() & ~fires.geometry.is_empty].copy()
     fires["_fire_year_numeric"] = fires["_fire_year_numeric"].astype("int32")
