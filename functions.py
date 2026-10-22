@@ -2,6 +2,7 @@
 
 Contents:
 - ensure_dir: create output directory tree
+- configure_geospatial_environment: configure and validate Conda GDAL/PROJ data paths
 - write_csv: write CSV atomically
 - should_skip, skip_task: skip-if-existing logic and log message
 """
@@ -12,6 +13,37 @@ import csv
 import os
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
+
+
+def configure_geospatial_environment() -> Path | None:
+    """Point geospatial libraries at the active Conda environment's data files."""
+    prefix = os.environ.get("CONDA_PREFIX")
+    if not prefix:
+        return None
+
+    proj_dir = Path(prefix) / "share" / "proj"
+    proj_database = proj_dir / "proj.db"
+    if not proj_database.is_file():
+        raise FileNotFoundError(f"PROJ database missing: {proj_database}")
+
+    os.environ["PROJ_LIB"] = str(proj_dir)
+    os.environ["PROJ_DATA"] = str(proj_dir)
+    gdal_dir = Path(prefix) / "share" / "gdal"
+    if gdal_dir.is_dir():
+        os.environ["GDAL_DATA"] = str(gdal_dir)
+
+    from pyproj import CRS, datadir
+
+    datadir.set_data_dir(str(proj_dir))
+    try:
+        CRS.from_epsg(4326)
+    except Exception as exc:
+        raise RuntimeError(f"PROJ database failed validation: {proj_database}") from exc
+
+    print(f"[env] PROJ data: {proj_dir}")
+    if gdal_dir.is_dir():
+        print(f"[env] GDAL data: {gdal_dir}")
+    return proj_dir
 
 
 def ensure_dir(path: Path) -> Path:

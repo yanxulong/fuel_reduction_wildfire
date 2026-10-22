@@ -11,6 +11,8 @@ import functions
 
 def build_wui_singlepart_dataset(project):
     """Build source-preserving single-part WUI GeoParquet shards for three vintages."""
+    functions.configure_geospatial_environment()
+
     import os
     import shutil
     import tempfile
@@ -202,7 +204,7 @@ def build_wui_singlepart_dataset(project):
             shutil.rmtree(output_dir)
         temporary_dir.replace(output_dir)
         temporary_summary.replace(summary_path)
-    except Exception:
+    except BaseException:
         shutil.rmtree(temporary_dir, ignore_errors=True)
         temporary_summary.unlink(missing_ok=True)
         raise
