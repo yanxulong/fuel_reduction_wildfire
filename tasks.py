@@ -729,7 +729,38 @@ def build_wui_annual_mtbs_outcomes(project):
     for year in range(2000, 2025):
         annual_geometries = perimeters.loc[perimeters["_outcome_year"].eq(year)].geometry.to_numpy()
         if len(annual_geometries):
-            dissolved = shapely.union_all(annual_geometries)
+            valid_mask = shapely.is_valid(annual_geometries)
+            invalid_count = int((~valid_mask).sum())
+            if invalid_count:
+                tqdm.write(
+                    f"[progress] MTBS {year}: repairing {invalid_count:,} invalid "
+                    "perimeter geometries with make_valid"
+                )
+                annual_geometries = annual_geometries.copy()
+                annual_geometries[~valid_mask] = shapely.make_valid(annual_geometries[~valid_mask])
+                still_invalid = int((~shapely.is_valid(annual_geometries)).sum())
+                if still_invalid:
+                    raise ValueError(
+                        f"MTBS {year}: {still_invalid:,} perimeter geometries remain invalid after make_valid"
+                    )
+
+            annual_parts = np.asarray(shapely.get_parts(annual_geometries), dtype=object)
+            polygonal_mask = np.fromiter(
+                (geometry.geom_type in {"Polygon", "MultiPolygon"} for geometry in annual_parts),
+                dtype=bool,
+                count=len(annual_parts),
+            )
+            discarded_parts = int((~polygonal_mask).sum())
+            if discarded_parts:
+                tqdm.write(
+                    f"[warning] MTBS {year}: discarding {discarded_parts:,} non-polygonal "
+                    "make_valid remnants"
+                )
+            annual_parts = annual_parts[polygonal_mask]
+            if not len(annual_parts):
+                raise ValueError(f"MTBS {year}: no polygonal perimeter geometry remains after repair")
+
+            dissolved = shapely.union_all(annual_parts)
             parts = np.asarray(shapely.get_parts(dissolved), dtype=object)
             parts = parts[~shapely.is_empty(parts)]
         else:
