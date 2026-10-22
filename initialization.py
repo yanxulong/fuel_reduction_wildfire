@@ -11,6 +11,7 @@ import tasks
 
 TASK_REGISTRY: dict[str, Callable] = {
     "build_wui_singlepart_dataset": tasks.build_wui_singlepart_dataset,
+    "build_fire_wui_centroid_paths": tasks.build_fire_wui_centroid_paths,
 }
 
 
@@ -59,6 +60,14 @@ def initialize_paths(project: LocalProjectFlow, config: dict[str, object] | None
         "wui_by_year_2010": project_root / "data" / "processed" / "wui_by_year" / "silvis_wui_2010.fgb",
         "wui_by_year_2020": project_root / "data" / "processed" / "wui_by_year" / "silvis_wui_2020.fgb",
         "wui_singlepart_dataset": project_root / "data" / "processed" / "wui_singlepart",
+        "fire_wui_path_dataset": project_root / "data" / "processed" / "fire_wui_centroid_paths",
+        "fire_wui_path_summary": output_dir / "tables" / "fire_wui_centroid_paths_summary.csv",
+        "mtbs_fod_points_candidates": (
+            project_root / "data" / "raw" / "MTBS" / "mtbs_fod_pts_data" / "mtbs_FODpoints_DD.shp",
+            project_root / "data" / "raw" / "MTBS" / "mtbs_FODpoints_DD.shp",
+            project_root / "data" / "archive" / "raw" / "MTBS" / "mtbs_fod_pts_data" / "mtbs_FODpoints_DD.shp",
+            project_root / "data" / "archive" / "raw" / "MTBS" / "mtbs_FODpoints_DD.shp",
+        ),
         "data_archive": project_root / "data" / "archive",
         "project": project_dir,
         "intermediate": project_dir / "intermediate",

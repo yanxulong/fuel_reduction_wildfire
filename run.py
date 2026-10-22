@@ -11,8 +11,9 @@ import initialization
 
 
 CONFIG = {
-    "enabled_tasks": ["build_wui_singlepart_dataset"],
+    "enabled_tasks": ["build_wui_singlepart_dataset", "build_fire_wui_centroid_paths"],
     "overwrite_existing": False,
+    "fire_wui_distance_miles": 3.0,
 }
 
 
@@ -30,6 +31,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--list-tasks", action="store_true", help="List registered tasks and exit.")
     parser.add_argument("--dry-run", action="store_true", help="Show paths and task order without running tasks.")
+    parser.add_argument(
+        "--distance-miles",
+        type=float,
+        default=None,
+        help="Fire-centroid to WUI single-part edge search distance (miles; default: 3).",
+    )
     return parser.parse_args()
 
 
@@ -42,6 +49,8 @@ def main() -> int:
 
     config = dict(CONFIG)
     config["enabled_tasks"] = args.task or list(CONFIG["enabled_tasks"])
+    if args.distance_miles is not None:
+        config["fire_wui_distance_miles"] = args.distance_miles
     project = initialization.LocalProjectFlow()
     initialization.initialize_paths(project, config)
 
