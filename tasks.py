@@ -602,7 +602,49 @@ def build_wui_annual_mtbs_outcomes(project):
         None,
     )
     if perimeter_path is None:
-        raise FileNotFoundError(f"No MTBS burned-area boundary shapefile found: {perimeter_candidates}")
+        search_roots = (
+            project.paths["raw"] / "MTBS",
+            project.paths["data_archive"] / "raw" / "MTBS",
+        )
+        discovered = sorted(
+            {
+                path.resolve()
+                for root in search_roots
+                if root.is_dir()
+                for path in root.rglob("mtbs_perims_DD.shp")
+                if path.is_file() and path.stat().st_size > 0
+            },
+            key=str,
+        )
+        if discovered:
+            rank = lambda path: (
+                int("archive" in {part.lower() for part in path.parts}),
+                int(any(part.lower().startswith("snapshot") for part in path.parts)),
+            )
+            best_rank = min(rank(path) for path in discovered)
+            preferred = [path for path in discovered if rank(path) == best_rank]
+        else:
+            preferred = []
+        if len(preferred) == 1:
+            perimeter_path = preferred[0]
+        elif len(preferred) > 1:
+            raise FileExistsError(
+                "Multiple MTBS perimeter shapefiles found; select one canonical copy by placing it at "
+                f"{perimeter_candidates[0]} or removing duplicate search results:\n  "
+                + "\n  ".join(str(path) for path in preferred)
+            )
+    if perimeter_path is None:
+        search_roots = (
+            project.paths["raw"] / "MTBS",
+            project.paths["data_archive"] / "raw" / "MTBS",
+        )
+        raise FileNotFoundError(
+            "No MTBS burned-area boundary shapefile found. Checked exact paths:\n  "
+            + "\n  ".join(str(path) for path in perimeter_candidates)
+            + "\nRecursive search roots:\n  "
+            + "\n  ".join(str(path) for path in search_roots)
+        )
+    print(f"[input] MTBS burned-area boundaries: {perimeter_path}")
 
     overwrite = bool(project.config.get("overwrite_existing", False))
     if functions.should_skip(overwrite, [output_dir, summary_path]):
