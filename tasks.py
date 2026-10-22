@@ -104,6 +104,9 @@ def build_wui_singlepart_dataset(project):
             dropped_nonpolygon_components = 0
             part_file_number = 0
             row_number_offset = 0
+            batch_number = 0
+
+            print(f"[progress] WUI {year}: reading {path}", flush=True)
 
             with pyogrio.open_arrow(
                 path,
@@ -111,6 +114,7 @@ def build_wui_singlepart_dataset(project):
                 batch_size=chunk_size,
             ) as (_, reader):
                 for batch in reader:
+                    batch_number += 1
                     attributes = batch.to_pandas()
                     if geometry_column not in attributes:
                         raise ValueError(f"Could not find geometry column {geometry_column!r} in {path}")
@@ -126,6 +130,11 @@ def build_wui_singlepart_dataset(project):
                     )
                     row_number_offset += batch_rows
                     attributes["wui_source_row_number"] = row_numbers
+                    print(
+                        f"[progress] WUI {year}: batch {batch_number}; "
+                        f"source rows={source_rows:,}; parts={single_part_rows:,}",
+                        flush=True,
+                    )
                     geometries = shapely.from_wkb(wkb.to_numpy())
                     frame = gpd.GeoDataFrame(attributes, geometry=geometries, crs=crs_text)
                     invalid = ~frame.geometry.is_valid
@@ -167,12 +176,22 @@ def build_wui_singlepart_dataset(project):
                     )
                     parts = parts[output_fields]
                     out_part = year_dir / f"part-{part_file_number:06d}.parquet"
+                    print(
+                        f"[progress] WUI {year}: writing shard {part_file_number + 1} "
+                        f"({len(parts):,} single parts)",
+                        flush=True,
+                    )
                     parts.to_parquet(out_part, index=False, compression="zstd")
                     part_file_number += 1
                     single_part_rows += len(parts)
 
             if source_rows == 0 or single_part_rows == 0:
                 raise RuntimeError(f"No WUI polygon records processed for vintage {year}: {path}")
+            print(
+                f"[progress] WUI {year}: complete; source rows={source_rows:,}; "
+                f"single parts={single_part_rows:,}; shards={part_file_number}",
+                flush=True,
+            )
             summary_rows.append(
                 {
                     "year": year,
