@@ -413,7 +413,7 @@ def build_fire_wui_centroid_paths(project):
                 "wui_single_part_id": "wui_single_part_id",
                 "wui_source_row_number": "wui_source_row_number",
                 "wui_single_part_number": "wui_single_part_number",
-                "year": "wui_vintage_year",
+                "year": "wui_source_year",
             }
             wui_rows = wui_rows.rename(
                 columns={
