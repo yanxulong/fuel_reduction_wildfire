@@ -14,6 +14,8 @@ TASK_REGISTRY: dict[str, Callable] = {
     "build_fire_wui_centroid_paths": tasks.build_fire_wui_centroid_paths,
     "build_fire_wui_centroid_path_distance_samples": tasks.build_fire_wui_centroid_path_distance_samples,
     "build_wui_annual_mtbs_outcomes": tasks.build_wui_annual_mtbs_outcomes,
+    "prepare_facts_treatments": tasks.prepare_facts_treatments,
+    "build_fire_wui_treatment_definitions": tasks.build_fire_wui_treatment_definitions,
 }
 
 
@@ -64,6 +66,7 @@ def initialize_paths(project: LocalProjectFlow, config: dict[str, object] | None
         "wui_singlepart_dataset": project_root / "data" / "processed" / "wui_singlepart",
         "fire_wui_path_dataset": project_root / "data" / "processed" / "fire_wui_centroid_paths",
         "fire_wui_path_summary": output_dir / "tables" / "fire_wui_centroid_paths_summary.csv",
+        "fire_wui_paths_10mi": project_root / "data" / "processed" / "fire_wui_centroid_paths" / "distance_10mi",
         "mtbs_fod_points_candidates": (
             project_root / "data" / "raw" / "MTBS" / "mtbs_fod_pts_data" / "mtbs_FODpoints_DD.shp",
             project_root / "data" / "raw" / "MTBS" / "mtbs_FODpoints_DD.shp",
@@ -76,6 +79,16 @@ def initialize_paths(project: LocalProjectFlow, config: dict[str, object] | None
             project_root / "data" / "archive" / "raw" / "MTBS" / "mtbs_perims_DD.shp",
             project_root / "data" / "archive" / "raw" / "MTBS" / "MTBS_Burn_Area" / "mtbs_perims_DD.shp",
         ),
+        "facts_treatment_candidates": (
+            project_root / "data" / "raw" / "FACTS" / "Actv_HazFuelTrt_PL" / "Actv_HazFuelTrt_PL.shp",
+            project_root / "data" / "raw" / "FACTS" / "Actv_HazFuelTrt_PL.shp",
+            project_root / "data" / "archive" / "raw" / "FACTS" / "Actv_HazFuelTrt_PL" / "Actv_HazFuelTrt_PL.shp",
+            project_root / "data" / "archive" / "raw" / "FACTS" / "Actv_HazFuelTrt_PL.shp",
+        ),
+        "facts_treatments_eligible": project_root / "data" / "processed" / "facts_treatments_eligible.parquet",
+        "fire_wui_treatment_dataset": project_root / "data" / "processed" / "fire_wui_treatment_definitions",
+        "fire_wui_treatment_summary": output_dir / "tables" / "fire_wui_treatment_definitions_summary.csv",
+        "treatment_definition_catalog": output_dir / "tables" / "treatment_definition_catalog.csv",
         "mtbs_severity_raster_root": project_root / "data" / "raw" / "MTBS" / "MTBS_BSmosaics",
         "wui_annual_mtbs_outcomes": project_root / "data" / "processed" / "wui_annual_mtbs_outcomes",
         "wui_annual_mtbs_outcomes_summary": output_dir / "tables" / "wui_annual_mtbs_outcomes_summary.csv",
