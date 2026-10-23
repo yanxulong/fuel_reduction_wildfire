@@ -1008,6 +1008,7 @@ def prepare_facts_treatments(project):
             (project.paths["raw"] / "FACTS", project.paths["data_archive"] / "raw" / "FACTS"),
         ),
         "Actv_HazFuelTrt_PL.shp",
+        require_attribute_table=True,
     )
     destination = project.paths["facts_treatments_eligible"]
     overwrite = bool(project.config.get("overwrite_existing", False))
@@ -1016,10 +1017,12 @@ def prepare_facts_treatments(project):
         return {"status": "skipped", "dataset": destination}
     info = pyogrio.read_info(source)
     fields = list(info.get("fields", []))
+    print(f"[input] FACTS: {source}", flush=True)
+    print(f"[check] FACTS fields={len(fields)}", flush=True)
     if not fields:
         raise ValueError(
             f"FACTS shapefile has no readable attribute table: {source}. "
-            "Restore matching .dbf/.shx files from the same download; treatment status, acres, and dates are required."
+            "The selected .dbf may be missing, empty, corrupt, or from a different download; treatment status, acres, and dates are required."
         )
     field_by_lower = {field.casefold(): field for field in fields}
 
@@ -1246,6 +1249,7 @@ def build_fire_wui_treatment_definitions(project):
             (project.paths["raw"] / "MTBS", project.paths["data_archive"] / "raw" / "MTBS"),
         ),
         "mtbs_perims_DD.shp",
+        require_attribute_table=True,
     )
     perimeter_info = pyogrio.read_info(perimeter_path)
     perimeter_fields = list(perimeter_info.get("fields", []))

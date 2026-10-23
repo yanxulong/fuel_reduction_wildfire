@@ -5,7 +5,7 @@ Contents:
 - configure_geospatial_environment: configure and validate Conda GDAL/PROJ data paths
 - inspect_compute_capacity: report allocated CPU/RAM and select bounded geospatial worker count
 - find_fire_point_source: resolve the first available MTBS Fire Occurrence points path
-- find_spatial_source: resolve canonical or unique recursive spatial input
+- find_spatial_source: resolve canonical or unique recursive spatial input, optionally requiring matching DBF
 - normalize_identifier: normalize event and activity IDs for cross-layer joins
 - build_treatment_time_windows: build configurable calendar, cumulative, and lag-band windows
 - treatment_window_membership: classify exact or year-only treatment dates against a window
@@ -290,14 +290,39 @@ def find_spatial_source(
     candidates: Iterable[Path],
     search_roots: Iterable[Path],
     pattern: str,
+    *,
+    require_attribute_table: bool = False,
 ) -> Path:
-    """Return first canonical spatial source, else require a unique recursive match."""
+    """Return first canonical source, optionally requiring a nonempty matching DBF."""
     checked = tuple(Path(path) for path in candidates)
     roots = tuple(Path(path) for path in search_roots)
+
+    def has_attribute_table(path: Path) -> bool:
+        if not require_attribute_table:
+            return True
+        expected_stem = path.stem.casefold()
+        try:
+            return any(
+                sibling.is_file()
+                and sibling.suffix.casefold() == ".dbf"
+                and sibling.stem.casefold() == expected_stem
+                and sibling.stat().st_size > 0
+                for sibling in path.parent.iterdir()
+            )
+        except OSError:
+            return False
+
+    def usable(path: Path) -> bool:
+        return (
+            path.is_file()
+            and path.stat().st_size > 0
+            and has_attribute_table(path)
+        )
+
     for path in checked:
-        if path.is_file() and path.stat().st_size > 0:
+        if usable(path):
             return path
-    discovered = sorted(
+    all_discovered = sorted(
         {
             path.resolve()
             for root in roots
@@ -307,6 +332,7 @@ def find_spatial_source(
         },
         key=str,
     )
+    discovered = [path for path in all_discovered if has_attribute_table(path)]
     if len(discovered) == 1:
         return discovered[0]
     if len(discovered) > 1:
@@ -323,10 +349,21 @@ def find_spatial_source(
             + "\n  ".join(str(path) for path in preferred)
         )
     raise FileNotFoundError(
-        f"No {pattern} spatial source found. Checked exact paths:\n  "
+        (
+            f"No {pattern} spatial source with a matching nonempty .dbf attribute table found."
+            if require_attribute_table
+            else f"No {pattern} spatial source found."
+        )
+        + " Checked exact paths:\n  "
         + "\n  ".join(map(str, checked))
         + "\nSearch roots:\n  "
         + "\n  ".join(map(str, roots))
+        + (
+            "\nShapefiles found without a matching nonempty .dbf:\n  "
+            + "\n  ".join(str(path) for path in all_discovered if not has_attribute_table(path))
+            if require_attribute_table and all_discovered
+            else ""
+        )
     )
 
 
