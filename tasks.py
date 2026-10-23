@@ -612,9 +612,9 @@ def build_wui_annual_mtbs_outcomes(project):
         None,
     )
     if perimeter_path is None:
-        search_roots = (
-            project.paths["raw"] / "MTBS",
-            project.paths["data_archive"] / "raw" / "MTBS",
+        search_roots = project.paths.get(
+            "mtbs_search_roots",
+            (project.paths["raw"] / "MTBS", project.paths["data_archive"] / "raw" / "MTBS"),
         )
         discovered = sorted(
             {
@@ -644,9 +644,9 @@ def build_wui_annual_mtbs_outcomes(project):
                 + "\n  ".join(str(path) for path in preferred)
             )
     if perimeter_path is None:
-        search_roots = (
-            project.paths["raw"] / "MTBS",
-            project.paths["data_archive"] / "raw" / "MTBS",
+        search_roots = project.paths.get(
+            "mtbs_search_roots",
+            (project.paths["raw"] / "MTBS", project.paths["data_archive"] / "raw" / "MTBS"),
         )
         raise FileNotFoundError(
             "No MTBS burned-area boundary shapefile found. Checked exact paths:\n  "
@@ -670,11 +670,21 @@ def build_wui_annual_mtbs_outcomes(project):
             f"Missing WUI single-part dataset: {singlepart_root}. Run build_wui_singlepart_dataset first."
         )
 
-    raster_paths = {
-        year: project.paths["mtbs_severity_raster_root"] / str(year) / f"mtbs_CONUS_{year}.tif"
-        for years in years_by_vintage.values()
-        for year in years
-    }
+    raster_roots = tuple(
+        Path(path)
+        for path in project.paths.get(
+            "mtbs_severity_raster_roots",
+            (project.paths["mtbs_severity_raster_root"],),
+        )
+    )
+    raster_paths = {}
+    for year in (year for years in years_by_vintage.values() for year in years):
+        filename = f"mtbs_CONUS_{year}.tif"
+        candidates = tuple(root / str(year) / filename for root in raster_roots)
+        raster_paths[year] = next(
+            (path for path in candidates if path.is_file() and path.stat().st_size > 0),
+            candidates[0],
+        )
     missing_rasters = [str(path) for path in raster_paths.values() if not path.is_file() or path.stat().st_size == 0]
     if missing_rasters:
         raise FileNotFoundError(
@@ -993,7 +1003,10 @@ def prepare_facts_treatments(project):
 
     source = functions.find_spatial_source(
         project.paths["facts_treatment_candidates"],
-        (project.paths["raw"] / "FACTS", project.paths["data_archive"] / "raw" / "FACTS"),
+        project.paths.get(
+            "facts_search_roots",
+            (project.paths["raw"] / "FACTS", project.paths["data_archive"] / "raw" / "FACTS"),
+        ),
         "Actv_HazFuelTrt_PL.shp",
     )
     destination = project.paths["facts_treatments_eligible"]
@@ -1095,6 +1108,7 @@ def prepare_facts_treatments(project):
     treatments = treatments.to_crs(5070)
     geometries = treatments.geometry.to_numpy()
     invalid_count = 0
+    missing_count = 0
     for start in tqdm(
         range(0, len(geometries), geometry_batch_size),
         desc="FACTS geometry audit",
@@ -1103,8 +1117,10 @@ def prepare_facts_treatments(project):
     ):
         stop = min(start + geometry_batch_size, len(geometries))
         chunk = geometries[start:stop]
+        missing = shapely.is_missing(chunk)
+        missing_count += int(missing.sum())
         valid = shapely.is_valid(chunk)
-        invalid = ~valid
+        invalid = (~valid) & (~missing)
         invalid_count += int(invalid.sum())
         if invalid.any():
             chunk = chunk.copy()
@@ -1112,8 +1128,16 @@ def prepare_facts_treatments(project):
             geometries[start:stop] = chunk
     if invalid_count:
         print(f"[progress] FACTS: repaired {invalid_count:,} invalid treatment geometries", flush=True)
+    if missing_count:
+        print(f"[progress] FACTS: dropping {missing_count:,} missing treatment geometries", flush=True)
+    missing = shapely.is_missing(geometries)
     polygonal = np.fromiter(
-        (geometry.geom_type in {"Polygon", "MultiPolygon"} and not geometry.is_empty for geometry in geometries),
+        (
+            not is_missing
+            and geometry.geom_type in {"Polygon", "MultiPolygon"}
+            and not geometry.is_empty
+            for geometry, is_missing in zip(geometries, missing)
+        ),
         dtype=bool,
         count=len(geometries),
     )
@@ -1217,7 +1241,10 @@ def build_fire_wui_treatment_definitions(project):
 
     perimeter_path = functions.find_spatial_source(
         project.paths["mtbs_perimeter_candidates"],
-        (project.paths["raw"] / "MTBS", project.paths["data_archive"] / "raw" / "MTBS"),
+        project.paths.get(
+            "mtbs_search_roots",
+            (project.paths["raw"] / "MTBS", project.paths["data_archive"] / "raw" / "MTBS"),
+        ),
         "mtbs_perims_DD.shp",
     )
     perimeter_info = pyogrio.read_info(perimeter_path)

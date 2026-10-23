@@ -67,6 +67,10 @@ def main() -> int:
     config["enabled_tasks"] = args.task or list(CONFIG["enabled_tasks"])
     if args.distance_miles is not None:
         config["fire_wui_distance_miles"] = args.distance_miles
+    if config.get("overwrite_existing", False):
+        print("[policy] overwrite enabled; existing task outputs may be rebuilt.")
+    else:
+        print("[policy] overwrite disabled; completed task outputs will be skipped.")
     project = initialization.LocalProjectFlow()
     initialization.initialize_paths(project, config)
 
