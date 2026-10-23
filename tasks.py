@@ -286,19 +286,73 @@ def build_fire_wui_centroid_paths(project):
     )
     overwrite = bool(project.config.get("overwrite_existing", False))
 
-    if functions.should_skip(overwrite, [output_dir, summary_path]):
-        functions.skip_task("build_fire_wui_centroid_paths", output_dir, summary_path)
-        return {"status": "skipped", "dataset": output_dir, "summary": summary_path}
-    if output_dir.exists() and not overwrite:
-        raise FileExistsError(
-            f"Output directory exists without a complete summary: {output_dir}. "
-            "Set overwrite_existing=True to rebuild it."
-        )
     if not singlepart_root.is_dir():
         raise FileNotFoundError(
             f"Missing single-part WUI dataset: {singlepart_root}. "
             "Run build_wui_singlepart_dataset first."
         )
+
+    expected_shards = []
+    for wui_year in (2000, 2010, 2020):
+        year_dir = singlepart_root / f"year_{wui_year}"
+        shard_paths = sorted(year_dir.glob("part-*.parquet"))
+        if not shard_paths:
+            raise FileNotFoundError(f"No single-part WUI parquet shards found: {year_dir}")
+        for shard_index, input_path in enumerate(shard_paths):
+            output_path = output_dir / f"wui_vintage_{wui_year}" / f"paths_part-{shard_index:06d}"
+            expected_shards.append((wui_year, input_path, output_path))
+
+    def existing_path_dataset_status():
+        missing = []
+        if not output_dir.is_dir():
+            missing.append("path dataset directory")
+        if not summary_path.is_file() or summary_path.stat().st_size == 0:
+            missing.append("path summary")
+            summary = None
+        else:
+            try:
+                summary = pd.read_csv(summary_path)
+            except Exception as exc:
+                missing.append(f"unreadable path summary ({exc})")
+                summary = None
+
+        if summary is not None:
+            required = {"wui_year", "input_path", "path_rows"}
+            if not required.issubset(summary.columns):
+                missing.append("path summary lacks shard index fields")
+                summary = None
+
+        for wui_year, input_path, shard_output in expected_shards:
+            shard_key = f"{wui_year}:{input_path.name}"
+            if not shard_output.is_dir():
+                missing.append(shard_key)
+                continue
+            if summary is None:
+                continue
+            years = pd.to_numeric(summary["wui_year"], errors="coerce")
+            input_names = summary["input_path"].fillna("").map(lambda value: Path(str(value)).name)
+            rows = summary.loc[(years == wui_year) & (input_names == input_path.name), "path_rows"]
+            if len(rows) != 1:
+                missing.append(f"{shard_key}: summary row")
+                continue
+            path_rows = pd.to_numeric(rows, errors="coerce").iloc[0]
+            parquet_parts = [
+                path for path in shard_output.glob("*.parquet")
+                if path.is_file() and path.stat().st_size > 0
+            ]
+            if pd.isna(path_rows) or (path_rows > 0 and not parquet_parts):
+                missing.append(f"{shard_key}: parquet data")
+        return not missing, missing
+
+    complete, missing_outputs = existing_path_dataset_status()
+    if complete and not overwrite:
+        functions.skip_task("build_fire_wui_centroid_paths", output_dir, summary_path)
+        return {"status": "skipped", "dataset": output_dir, "summary": summary_path}
+    if not overwrite and (output_dir.exists() or summary_path.exists()):
+        sample = "; ".join(missing_outputs[:8])
+        remaining = len(missing_outputs) - min(len(missing_outputs), 8)
+        suffix = f"; plus {remaining} more" if remaining else ""
+        print(f"[rebuild] incomplete {distance_label} path outputs: {sample}{suffix}", flush=True)
 
     point_info = pyogrio.read_info(source_points)
     point_fields = list(point_info["fields"])
@@ -459,16 +513,9 @@ def build_fire_wui_centroid_paths(project):
 
     try:
         tasks_to_run = []
-        for wui_year in (2000, 2010, 2020):
-            year_dir = singlepart_root / f"year_{wui_year}"
-            shard_paths = sorted(year_dir.glob("part-*.parquet"))
-            if not shard_paths:
-                raise FileNotFoundError(f"No single-part WUI parquet shards found: {year_dir}")
-            year_output = temporary_dir / f"wui_vintage_{wui_year}"
-            year_output.mkdir(parents=True, exist_ok=True)
-            for shard_index, input_path in enumerate(shard_paths):
-                output_path = year_output / f"paths_part-{shard_index:06d}"
-                tasks_to_run.append((wui_year, input_path, output_path))
+        for wui_year, input_path, final_output_path in expected_shards:
+            output_path = temporary_dir / f"wui_vintage_{wui_year}" / final_output_path.name
+            tasks_to_run.append((wui_year, input_path, output_path))
 
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = [executor.submit(process_shard, task) for task in tasks_to_run]
