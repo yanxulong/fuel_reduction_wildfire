@@ -4,6 +4,8 @@ Contents:
 - ensure_dir: create output directory tree
 - configure_geospatial_environment: configure and validate Conda GDAL/PROJ data paths
 - inspect_compute_capacity: report allocated CPU/RAM and select bounded geospatial worker count
+- discover_landfire_tiles, validate_landfire_tiles, build_landfire_vrt: find and validate tiled LANDFIRE rasters without mosaicking data
+- zonal_landfire_terrain_stats, sample_landfire_terrain_points: summarize elevation, aspect, and slope at polygon and point levels
 - find_fire_point_source: resolve the first available MTBS Fire Occurrence points path
 - find_spatial_source: resolve canonical or unique recursive spatial input, optionally requiring matching DBF
 - normalize_identifier: normalize event and activity IDs for cross-layer joins
@@ -60,6 +62,378 @@ def ensure_dir(path: Path) -> Path:
     """Create directory and parents, then return its path."""
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def discover_landfire_tiles(layer_dir: Path) -> tuple[Path, ...]:
+    """Find nonempty GeoTIFF tiles for one LANDFIRE layer."""
+    directory = Path(layer_dir)
+    if not directory.is_dir():
+        raise FileNotFoundError(f"LANDFIRE layer directory is missing: {directory}")
+    tiles = tuple(
+        path.resolve()
+        for path in sorted(directory.rglob("*"))
+        if path.is_file() and path.suffix.casefold() in {".tif", ".tiff"} and path.stat().st_size > 0
+    )
+    if not tiles:
+        raise FileNotFoundError(f"No nonempty GeoTIFF tiles found under: {directory}")
+    return tiles
+
+
+def validate_landfire_tiles(layer_name: str, tiles: Iterable[Path]) -> dict[str, object]:
+    """Validate tile CRS, band count, pixel grid, and NoData consistency."""
+    import math
+
+    import rasterio
+    from pyproj import CRS
+
+    paths = tuple(Path(path) for path in tiles)
+    if not paths:
+        raise ValueError(f"No tiles supplied for LANDFIRE {layer_name}")
+    base = None
+    base_crs = None
+    base_nodata = None
+    for path in paths:
+        with rasterio.open(path) as source:
+            if source.count != 1:
+                raise ValueError(f"Expected one band in LANDFIRE {layer_name} tile: {path}; bands={source.count}")
+            if source.crs is None:
+                raise ValueError(f"LANDFIRE {layer_name} tile has no CRS: {path}")
+            current_crs = CRS.from_user_input(source.crs)
+            if base is None:
+                base = source.transform
+                base_crs = current_crs
+                base_nodata = source.nodata
+            else:
+                if current_crs != base_crs:
+                    raise ValueError(f"LANDFIRE {layer_name} tile CRS mismatch: {path}")
+                transform = source.transform
+                if not (
+                    math.isclose(transform.a, base.a, rel_tol=0, abs_tol=1e-9)
+                    and math.isclose(transform.e, base.e, rel_tol=0, abs_tol=1e-9)
+                    and math.isclose(transform.b, base.b, rel_tol=0, abs_tol=1e-12)
+                    and math.isclose(transform.d, base.d, rel_tol=0, abs_tol=1e-12)
+                ):
+                    raise ValueError(f"LANDFIRE {layer_name} tile resolution or rotation mismatch: {path}")
+                nodata_equal = source.nodata == base_nodata
+                if source.nodata is not None and base_nodata is not None:
+                    nodata_equal = nodata_equal or (
+                        math.isnan(source.nodata)
+                        and math.isnan(base_nodata)
+                    )
+                if not nodata_equal:
+                    raise ValueError(f"LANDFIRE {layer_name} tile NoData mismatch: {path}")
+            transform = source.transform
+            col_offset = (transform.c - base.c) / base.a
+            row_offset = (transform.f - base.f) / base.e
+            if not (
+                math.isclose(col_offset, round(col_offset), rel_tol=0, abs_tol=1e-5)
+                and math.isclose(row_offset, round(row_offset), rel_tol=0, abs_tol=1e-5)
+            ):
+                raise ValueError(f"LANDFIRE {layer_name} tile is misaligned to pixel grid: {path}")
+    return {
+        "layer": layer_name,
+        "tile_count": len(paths),
+        "crs": base_crs,
+        "resolution": (base.a, base.e),
+        "nodata": base_nodata,
+    }
+
+
+def build_landfire_vrt(tiles: Iterable[Path], output_path: Path) -> Path:
+    """Build a lightweight GDAL virtual raster; source pixel data stays in tiles."""
+    import math
+    import xml.etree.ElementTree as ET
+
+    import rasterio
+    from pyproj import CRS
+
+    paths = tuple(Path(path).resolve() for path in tiles)
+    if not paths:
+        raise ValueError("Cannot build a LANDFIRE VRT without input tiles")
+    output_path = Path(output_path)
+    ensure_dir(output_path.parent)
+    with rasterio.open(paths[0]) as first:
+        first_transform = first.transform
+        if first_transform.b != 0 or first_transform.d != 0 or first_transform.a <= 0 or first_transform.e >= 0:
+            raise ValueError(f"LANDFIRE VRT requires north-up, unrotated tiles: {paths[0]}")
+        x_resolution = first_transform.a
+        y_resolution = -first_transform.e
+        dtype = first.dtypes[0]
+        crs_definition = CRS.from_user_input(first.crs) if first.crs else None
+        crs_wkt = crs_definition.to_wkt() if crs_definition else None
+        nodata = first.nodata
+        band_count = first.count
+        source_metadata = []
+        left = float("inf")
+        right = float("-inf")
+        bottom = float("inf")
+        top = float("-inf")
+        for path in paths:
+            with rasterio.open(path) as source:
+                if source.count != band_count or source.dtypes[0] != dtype or source.crs is None:
+                    raise ValueError(f"LANDFIRE tile band, dtype, or CRS mismatch: {path}")
+                transform = source.transform
+                if (
+                    not math.isclose(transform.a, x_resolution, rel_tol=0, abs_tol=1e-9)
+                    or not math.isclose(transform.e, -y_resolution, rel_tol=0, abs_tol=1e-9)
+                    or transform.b != 0
+                    or transform.d != 0
+                ):
+                    raise ValueError(f"LANDFIRE tile grid mismatch while building VRT: {path}")
+                nodata_equal = source.nodata == nodata
+                if source.nodata is not None and nodata is not None:
+                    nodata_equal = nodata_equal or (math.isnan(source.nodata) and math.isnan(nodata))
+                if CRS.from_user_input(source.crs) != crs_definition or not nodata_equal:
+                    raise ValueError(f"LANDFIRE tile CRS or NoData mismatch while building VRT: {path}")
+                tile_left = transform.c
+                tile_top = transform.f
+                tile_right = tile_left + source.width * x_resolution
+                tile_bottom = tile_top - source.height * y_resolution
+                left = min(left, tile_left)
+                right = max(right, tile_right)
+                bottom = min(bottom, tile_bottom)
+                top = max(top, tile_top)
+                block_height, block_width = source.block_shapes[0]
+                source_metadata.append((path, source.width, source.height, transform, block_width, block_height))
+
+    gdal_types = {
+        "uint8": "Byte",
+        "uint16": "UInt16",
+        "int16": "Int16",
+        "uint32": "UInt32",
+        "int32": "Int32",
+        "uint64": "UInt64",
+        "int64": "Int64",
+        "float32": "Float32",
+        "float64": "Float64",
+    }
+    if dtype not in gdal_types:
+        raise ValueError(f"Unsupported LANDFIRE raster dtype for VRT: {dtype}")
+    width = round((right - left) / x_resolution)
+    height = round((top - bottom) / y_resolution)
+    root = ET.Element("VRTDataset", rasterXSize=str(width), rasterYSize=str(height))
+    if crs_wkt:
+        ET.SubElement(root, "SRS").text = crs_wkt
+    ET.SubElement(root, "GeoTransform").text = (
+        f"{left:.15g}, {x_resolution:.15g}, 0, {top:.15g}, 0, {-y_resolution:.15g}"
+    )
+    band = ET.SubElement(root, "VRTRasterBand", dataType=gdal_types[dtype], band="1")
+    if nodata is not None:
+        ET.SubElement(band, "NoDataValue").text = str(nodata)
+    for path, tile_width, tile_height, transform, block_width, block_height in source_metadata:
+        col_offset = round((transform.c - left) / x_resolution)
+        row_offset = round((top - transform.f) / y_resolution)
+        if (
+            not math.isclose((transform.c - left) / x_resolution, col_offset, rel_tol=0, abs_tol=1e-5)
+            or not math.isclose((top - transform.f) / y_resolution, row_offset, rel_tol=0, abs_tol=1e-5)
+        ):
+            raise ValueError(f"LANDFIRE tile is not aligned to VRT pixel grid: {path}")
+        source = ET.SubElement(band, "SimpleSource")
+        ET.SubElement(source, "SourceFilename", relativeToVRT="0").text = str(path)
+        ET.SubElement(source, "SourceBand").text = "1"
+        ET.SubElement(
+            source,
+            "SourceProperties",
+            RasterXSize=str(tile_width),
+            RasterYSize=str(tile_height),
+            DataType=gdal_types[dtype],
+            BlockXSize=str(block_width),
+            BlockYSize=str(block_height),
+        )
+        ET.SubElement(source, "SrcRect", xOff="0", yOff="0", xSize=str(tile_width), ySize=str(tile_height))
+        ET.SubElement(
+            source,
+            "DstRect",
+            xOff=str(col_offset),
+            yOff=str(row_offset),
+            xSize=str(tile_width),
+            ySize=str(tile_height),
+        )
+    ET.indent(root, space="  ")
+    ET.ElementTree(root).write(output_path, encoding="UTF-8", xml_declaration=True)
+    if not output_path.is_file() or output_path.stat().st_size == 0:
+        raise RuntimeError(f"GDAL produced an empty LANDFIRE VRT: {output_path}")
+    with rasterio.open(output_path) as check:
+        if check.width != width or check.height != height or check.count != 1:
+            raise RuntimeError(f"Generated LANDFIRE VRT failed metadata validation: {output_path}")
+    return output_path
+
+
+def _landfire_grid(paths: Mapping[str, Path]):
+    """Open LANDFIRE VRTs and verify shared grid before zonal rasterization."""
+    import rasterio
+
+    datasets = {name: rasterio.open(path) for name, path in paths.items()}
+    first_name = next(iter(datasets))
+    first = datasets[first_name]
+    for name, source in datasets.items():
+        if source.crs is None or source.crs != first.crs:
+            for opened in datasets.values():
+                opened.close()
+            raise ValueError(f"LANDFIRE VRT CRS mismatch: {name}={source.crs}; {first_name}={first.crs}")
+        if source.transform != first.transform or source.width != first.width or source.height != first.height:
+            for opened in datasets.values():
+                opened.close()
+            raise ValueError(f"LANDFIRE VRT grids differ: {name} does not align with {first_name}")
+        if source.count != 1:
+            for opened in datasets.values():
+                opened.close()
+            raise ValueError(f"LANDFIRE VRT must be single-band: {name} has {source.count} bands")
+    return datasets
+
+
+def zonal_landfire_terrain_stats(
+    geometries: Sequence[object],
+    vrt_paths: Mapping[str, Path],
+    *,
+    block_size: int = 2048,
+) -> dict[str, object]:
+    """Compute center-in-pixel zonal means by rasterizing many small polygons per block.
+
+    WUI single-part geometries should not overlap. Fire areas can overlap, so call this
+    with one dissolved event geometry at a time. Aspect code -1 is treated as flat;
+    directional components use valid aspect values from 0 through 359 degrees.
+    """
+    import math
+
+    import numpy as np
+    import rasterio
+    from rasterio.features import rasterize
+    from rasterio.windows import Window, from_bounds
+
+    if block_size < 1:
+        raise ValueError("block_size must be positive")
+    required = {"elev", "asp", "slpd"}
+    if set(vrt_paths) != required:
+        raise ValueError(f"LANDFIRE VRT mapping must contain {sorted(required)}; got {sorted(vrt_paths)}")
+    count = len(geometries)
+    elev_sum = np.zeros(count, dtype=np.float64)
+    elev_count = np.zeros(count, dtype=np.int64)
+    slope_sum = np.zeros(count, dtype=np.float64)
+    slope_count = np.zeros(count, dtype=np.int64)
+    aspect_north_sum = np.zeros(count, dtype=np.float64)
+    aspect_east_sum = np.zeros(count, dtype=np.float64)
+    aspect_count = np.zeros(count, dtype=np.int64)
+    aspect_valid_count = np.zeros(count, dtype=np.int64)
+    aspect_flat_count = np.zeros(count, dtype=np.int64)
+
+    datasets = _landfire_grid(vrt_paths)
+    try:
+        base = datasets["elev"]
+        transform = base.transform
+        chunk_features: dict[tuple[int, int], list[int]] = {}
+        for index, geometry in enumerate(geometries):
+            if geometry is None or geometry.is_empty:
+                continue
+            bounds_window = from_bounds(*geometry.bounds, transform=transform)
+            row_start = max(0, math.floor(bounds_window.row_off))
+            row_stop = min(base.height, math.ceil(bounds_window.row_off + bounds_window.height))
+            col_start = max(0, math.floor(bounds_window.col_off))
+            col_stop = min(base.width, math.ceil(bounds_window.col_off + bounds_window.width))
+            if row_start >= row_stop or col_start >= col_stop:
+                continue
+            first_block_row = (row_start // block_size) * block_size
+            first_block_col = (col_start // block_size) * block_size
+            for block_row in range(first_block_row, row_stop, block_size):
+                for block_col in range(first_block_col, col_stop, block_size):
+                    chunk_features.setdefault((block_row, block_col), []).append(index)
+
+        for (block_row, block_col), feature_indices in chunk_features.items():
+            height = min(block_size, base.height - block_row)
+            width = min(block_size, base.width - block_col)
+            window = Window(block_col, block_row, width, height)
+            block_transform = base.window_transform(window)
+            shapes = ((geometries[index], index + 1) for index in feature_indices)
+            labels = rasterize(
+                shapes,
+                out_shape=(height, width),
+                transform=block_transform,
+                fill=0,
+                dtype="int32",
+                all_touched=False,
+            )
+            assigned = labels > 0
+            if not assigned.any():
+                continue
+            for layer, source in datasets.items():
+                raster = source.read(1, window=window, masked=True)
+                values = np.asarray(raster.data)
+                valid = assigned & ~np.ma.getmaskarray(raster) & np.isfinite(values)
+                if layer == "elev" or layer == "slpd":
+                    ids = labels[valid]
+                    weights = values[valid].astype(np.float64, copy=False)
+                    layer_counts = np.bincount(ids, minlength=count + 1)
+                    layer_sums = np.bincount(ids, weights=weights, minlength=count + 1)
+                    if layer == "elev":
+                        elev_count += layer_counts[1:]
+                        elev_sum += layer_sums[1:]
+                    else:
+                        slope_count += layer_counts[1:]
+                        slope_sum += layer_sums[1:]
+                else:
+                    selected = values[valid].astype(np.float64, copy=False)
+                    selected_ids = labels[valid]
+                    supported = (selected == -1) | ((selected >= 0) & (selected <= 359))
+                    if supported.any():
+                        aspect_count += np.bincount(selected_ids[supported], minlength=count + 1)[1:]
+                    flat = selected == -1
+                    if flat.any():
+                        aspect_flat_count += np.bincount(selected_ids[flat], minlength=count + 1)[1:]
+                    directional = (selected >= 0) & (selected <= 359)
+                    if directional.any():
+                        theta = np.deg2rad(selected[directional])
+                        ids = selected_ids[directional]
+                        north = np.bincount(ids, weights=np.cos(theta), minlength=count + 1)
+                        east = np.bincount(ids, weights=np.sin(theta), minlength=count + 1)
+                        aspect_north_sum += north[1:]
+                        aspect_east_sum += east[1:]
+                        aspect_valid_count += np.bincount(ids, minlength=count + 1)[1:]
+    finally:
+        for source in datasets.values():
+            source.close()
+
+    def mean(values, counts):
+        return np.divide(values, counts, out=np.full(count, np.nan), where=counts > 0)
+
+    northness = mean(aspect_north_sum, aspect_valid_count)
+    eastness = mean(aspect_east_sum, aspect_valid_count)
+    circular_degrees = np.mod(np.degrees(np.arctan2(eastness, northness)), 360.0)
+    no_direction = aspect_valid_count == 0
+    circular_degrees[no_direction] = np.nan
+    return {
+        "elev_mean_m": mean(elev_sum, elev_count),
+        "elev_valid_pixels": elev_count,
+        "slpd_mean_degrees": mean(slope_sum, slope_count),
+        "slpd_valid_pixels": slope_count,
+        "asp_mean_northness": northness,
+        "asp_mean_eastness": eastness,
+        "asp_circular_mean_degrees": circular_degrees,
+        "asp_valid_pixels": aspect_count,
+        "asp_directional_pixels": aspect_valid_count,
+        "asp_flat_pixels": aspect_flat_count,
+    }
+
+
+def sample_landfire_terrain_points(
+    coordinates: Sequence[tuple[float, float]],
+    vrt_paths: Mapping[str, Path],
+) -> dict[str, object]:
+    """Sample one raster cell per point; return NaN for masked or out-of-extent cells."""
+    import numpy as np
+
+    if not coordinates:
+        return {layer: np.empty(0, dtype=np.float64) for layer in vrt_paths}
+    datasets = _landfire_grid(vrt_paths)
+    try:
+        results = {}
+        for layer, source in datasets.items():
+            sampled = np.ma.vstack(list(source.sample(coordinates, indexes=1, masked=True)))
+            values = np.asarray(sampled[:, 0].astype(np.float64).filled(np.nan), dtype=np.float64)
+            results[layer] = values
+    finally:
+        for source in datasets.values():
+            source.close()
+    return results
 
 
 def inspect_compute_capacity(

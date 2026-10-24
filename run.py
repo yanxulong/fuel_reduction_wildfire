@@ -13,6 +13,7 @@ import initialization
 CONFIG = {
     "enabled_tasks": [
         "build_wui_singlepart_dataset",
+        "landfire_controls",
         "build_wui_annual_mtbs_outcomes",
         "build_fire_wui_centroid_path_distance_samples",
         "prepare_facts_treatments",

@@ -14,6 +14,7 @@ TASK_REGISTRY: dict[str, Callable] = {
     "build_fire_wui_centroid_paths": tasks.build_fire_wui_centroid_paths,
     "build_fire_wui_centroid_path_distance_samples": tasks.build_fire_wui_centroid_path_distance_samples,
     "build_wui_annual_mtbs_outcomes": tasks.build_wui_annual_mtbs_outcomes,
+    "landfire_controls": tasks.landfire_controls,
     "prepare_facts_treatments": tasks.prepare_facts_treatments,
     "build_fire_wui_treatment_definitions": tasks.build_fire_wui_treatment_definitions,
 }
@@ -136,6 +137,26 @@ def initialize_paths(project: LocalProjectFlow, config: dict[str, object] | None
     perimeter_candidates = spatial_candidates("MTBS", "mtbs_perims_DD.shp")
     facts_candidates = spatial_candidates("FACTS", "Actv_HazFuelTrt_PL.shp")
 
+    landfire_roots = unique_paths([
+        scratch_root,
+        home_root,
+        *extra_roots,
+        checkout_root,
+        project_root,
+    ])
+    landfire_root_candidates = unique_paths([
+        root / "data" / "raw" / "science_controls" / "LANDFIRE" / "LF2020"
+        for root in landfire_roots
+    ])
+    landfire_root = next(
+        (
+            candidate
+            for candidate in landfire_root_candidates
+            if all((candidate / layer).is_dir() for layer in ("Elev", "Asp", "SlpD"))
+        ),
+        landfire_root_candidates[0],
+    )
+
     mtbs_raster_roots = unique_paths([
         root / relative
         for root in data_roots
@@ -240,6 +261,12 @@ def initialize_paths(project: LocalProjectFlow, config: dict[str, object] | None
         "mtbs_fod_points_candidates": fod_candidates,
         "mtbs_perimeter_candidates": perimeter_candidates,
         "facts_treatment_candidates": facts_candidates,
+        "landfire_raster_root": landfire_root,
+        "landfire_elev_tiles": landfire_root / "Elev",
+        "landfire_asp_tiles": landfire_root / "Asp",
+        "landfire_slpd_tiles": landfire_root / "SlpD",
+        "landfire_control_dataset": project_root / "data" / "processed" / "landfire_controls",
+        "landfire_controls_summary": output_dir / "tables" / "landfire_controls_summary.csv",
         "mtbs_search_roots": raw_search_roots,
         "facts_search_roots": facts_search_roots,
         "facts_treatments_eligible": facts_treatment_path,

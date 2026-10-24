@@ -7,6 +7,7 @@ Contents:
 - build_wui_annual_mtbs_outcomes: calculate annual burn, area, and severity for WUI single parts
 - prepare_facts_treatments: retain completed FACTS prevention polygons and treatment-date provenance
 - build_fire_wui_treatment_definitions: create treatment windows, path/angular exposure, thickness, and fire-perimeter controls
+- landfire_controls: summarize LF2020 terrain rasters for WUI single parts, MTBS fire points, and MTBS fire areas
 """
 
 from __future__ import annotations
@@ -1721,4 +1722,447 @@ def build_fire_wui_treatment_definitions(project):
         "pairs": total_pairs,
         "exposure_rows": total_exposure_rows,
         "perimeter_matches": perimeter_matched,
+    }
+
+
+def landfire_controls(project):
+    """Create LF2020 terrain controls for WUI units, MTBS point records, and fire areas."""
+    functions.configure_geospatial_environment()
+
+    import os
+    import shutil
+    import tempfile
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from pathlib import Path
+
+    import geopandas as gpd
+    import numpy as np
+    import pandas as pd
+    import rasterio
+    import shapely
+    from pyproj import CRS
+    from tqdm import tqdm
+
+    years = (2000, 2025)
+    output_dir = Path(project.paths["landfire_control_dataset"])
+    summary_path = Path(project.paths["landfire_controls_summary"])
+    layer_dirs = {
+        "elev": Path(project.paths["landfire_elev_tiles"]),
+        "asp": Path(project.paths["landfire_asp_tiles"]),
+        "slpd": Path(project.paths["landfire_slpd_tiles"]),
+    }
+    layer_tiles = {
+        name: functions.discover_landfire_tiles(directory)
+        for name, directory in layer_dirs.items()
+    }
+    tile_metadata = {
+        name: functions.validate_landfire_tiles(name, tiles)
+        for name, tiles in layer_tiles.items()
+    }
+    tile_counts = {name: int(metadata["tile_count"]) for name, metadata in tile_metadata.items()}
+    print("[input] LANDFIRE LF2020 tile counts: " + ", ".join(
+        f"{name}={count}" for name, count in tile_counts.items()
+    ), flush=True)
+
+    singlepart_root = Path(project.paths["wui_singlepart_dataset"])
+    if not singlepart_root.is_dir():
+        raise FileNotFoundError(
+            f"Missing WUI single-part dataset: {singlepart_root}. Run build_wui_singlepart_dataset first."
+        )
+    wui_inputs = []
+    for vintage in (2000, 2010, 2020):
+        year_dir = singlepart_root / f"year_{vintage}"
+        shards = sorted(year_dir.glob("part-*.parquet"))
+        if not shards:
+            raise FileNotFoundError(f"No WUI single-part parquet shards found: {year_dir}")
+        wui_inputs.extend((vintage, shard) for shard in shards)
+
+    fire_point_path = functions.find_fire_point_source(project.paths["mtbs_fod_points_candidates"])
+    perimeter_path = functions.find_spatial_source(
+        project.paths["mtbs_perimeter_candidates"],
+        project.paths.get("mtbs_search_roots", ()),
+        "mtbs_perims_DD.shp",
+        require_attribute_table=True,
+    )
+    print(f"[input] MTBS fire points: {fire_point_path}", flush=True)
+    print(f"[input] MTBS fire areas: {perimeter_path}", flush=True)
+
+    wui_output = output_dir / "wui_singlepart"
+    point_output = output_dir / "fire_points" / "fire_points.parquet"
+    area_output = output_dir / "fire_areas" / "fire_areas.parquet"
+    summary_fields = (
+        "level",
+        "wui_vintage_year",
+        "analysis_year_start",
+        "analysis_year_end",
+        "source_records",
+        "complete_records",
+        "partial_records",
+        "no_data_records",
+        "raster_vintage",
+        "elev_tile_count",
+        "asp_tile_count",
+        "slpd_tile_count",
+        "elev_tile_dir",
+        "asp_tile_dir",
+        "slpd_tile_dir",
+        "input_path",
+        "output_path",
+    )
+
+    def product_is_complete() -> bool:
+        expected_wui = [
+            wui_output / f"year_{vintage}" / shard.name
+            for vintage, shard in wui_inputs
+        ]
+        expected = [*expected_wui, point_output, area_output]
+        if not summary_path.is_file() or summary_path.stat().st_size == 0:
+            return False
+        if any(not path.is_file() or path.stat().st_size == 0 for path in expected):
+            return False
+        try:
+            summary = pd.read_csv(summary_path)
+        except Exception:
+            return False
+        if not {"level", "output_path"}.issubset(summary.columns):
+            return False
+        if len(summary.loc[summary["level"].eq("wui_singlepart")]) != len(wui_inputs):
+            return False
+        if len(summary.loc[summary["level"].eq("fire_points")]) != 1:
+            return False
+        if len(summary.loc[summary["level"].eq("fire_areas")]) != 1:
+            return False
+        summary_outputs = set(summary["output_path"].dropna().astype(str))
+        return all(str(path) in summary_outputs for path in expected)
+
+    overwrite = bool(project.config.get("overwrite_existing", False))
+    if product_is_complete() and not overwrite:
+        functions.skip_task("landfire_controls", output_dir, summary_path)
+        return {"status": "skipped", "dataset": output_dir, "summary": summary_path}
+    if output_dir.exists() and not overwrite:
+        print("[rebuild] LANDFIRE controls are incomplete; rebuilding full control set.", flush=True)
+
+    functions.ensure_dir(output_dir.parent)
+    functions.ensure_dir(summary_path.parent)
+    temporary_dir = Path(tempfile.mkdtemp(prefix=".landfire_controls.", dir=output_dir.parent))
+    temporary_summary = summary_path.with_name(f".{summary_path.name}.{os.getpid()}.tmp")
+    intermediate_dir = Path(project.paths["intermediate"])
+    functions.ensure_dir(intermediate_dir)
+    summary_rows = []
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="landfire_vrt.", dir=intermediate_dir) as vrt_dir:
+            vrt_paths = {
+                layer: functions.build_landfire_vrt(
+                    layer_tiles[layer], Path(vrt_dir) / f"LF2020_{layer}.vrt"
+                )
+                for layer in ("elev", "asp", "slpd")
+            }
+            with rasterio.open(vrt_paths["elev"]) as reference:
+                raster_crs = reference.crs
+                if raster_crs is None:
+                    raise ValueError(f"LANDFIRE Elev VRT has no CRS: {vrt_paths['elev']}")
+                crs_definition = CRS.from_user_input(raster_crs)
+                if (
+                    not crs_definition.is_projected
+                    or not crs_definition.axis_info
+                    or any(abs(axis.unit_conversion_factor - 1.0) > 1e-9 for axis in crs_definition.axis_info[:2])
+                ):
+                    raise ValueError(
+                        f"LANDFIRE raster CRS must use projected meter units for fire-area measurements; "
+                        f"got {crs_definition}"
+                    )
+                raster_bounds = reference.bounds
+                print(
+                    f"[raster] CRS={raster_crs}; resolution={reference.res}; "
+                    f"bounds={tuple(round(value, 2) for value in raster_bounds)}",
+                    flush=True,
+                )
+            for layer, path in vrt_paths.items():
+                with rasterio.open(path) as source:
+                    if source.crs != raster_crs:
+                        raise ValueError(f"LANDFIRE {layer} does not match Elev CRS: {source.crs}")
+
+            capacity = functions.inspect_compute_capacity(memory_per_worker_gib=8.0, max_workers=8)
+            workers = int(capacity["workers"])
+
+            def process_wui_shard(item):
+                vintage, input_path = item
+                wui = gpd.read_parquet(input_path)
+                required = {"wui_single_part_id", "wui_source_row_number", "wui_single_part_number", "year"}
+                missing = sorted(required.difference(wui.columns))
+                if missing:
+                    raise ValueError(f"WUI shard lacks required fields {missing}: {input_path}")
+                if wui.crs is None:
+                    raise ValueError(f"WUI shard has no CRS: {input_path}")
+                if not wui.empty and not wui["year"].eq(vintage).all():
+                    raise ValueError(f"WUI vintage mismatch, expected {vintage}: {input_path}")
+                wui = wui.to_crs(raster_crs).reset_index(drop=True)
+                stats = functions.zonal_landfire_terrain_stats(wui.geometry.to_list(), vrt_paths)
+                rows = pd.DataFrame({
+                    "wui_single_part_id": wui["wui_single_part_id"],
+                    "wui_source_row_number": wui["wui_source_row_number"],
+                    "wui_single_part_number": wui["wui_single_part_number"],
+                    "wui_vintage_year": np.full(len(wui), vintage, dtype=np.int16),
+                    "landfire_raster_vintage": np.full(len(wui), 2020, dtype=np.int16),
+                })
+                for name, values in stats.items():
+                    rows[f"lf2020_{name}"] = values
+                rows["lf2020_status"] = np.select(
+                    [
+                        (rows["lf2020_elev_valid_pixels"] > 0)
+                        & (rows["lf2020_slpd_valid_pixels"] > 0)
+                        & (rows["lf2020_asp_valid_pixels"] > 0),
+                        (rows["lf2020_elev_valid_pixels"] > 0)
+                        | (rows["lf2020_slpd_valid_pixels"] > 0)
+                        | (rows["lf2020_asp_valid_pixels"] > 0),
+                    ],
+                    ["complete", "partial"],
+                    default="no_data",
+                )
+                out_path = temporary_dir / "wui_singlepart" / f"year_{vintage}" / input_path.name
+                functions.ensure_dir(out_path.parent)
+                rows.to_parquet(out_path, index=False, compression="zstd")
+                status_counts = rows["lf2020_status"].value_counts()
+                return {
+                    "level": "wui_singlepart",
+                    "wui_vintage_year": vintage,
+                    "source_records": len(rows),
+                    "complete_records": int(status_counts.get("complete", 0)),
+                    "partial_records": int(status_counts.get("partial", 0)),
+                    "no_data_records": int(status_counts.get("no_data", 0)),
+                    "input_path": str(input_path),
+                    "output_path": str(wui_output / f"year_{vintage}" / input_path.name),
+                }
+
+            tqdm.write(f"[progress] WUI controls: {len(wui_inputs):,} shards; workers={workers}")
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = [executor.submit(process_wui_shard, item) for item in wui_inputs]
+                with tqdm(total=len(futures), desc="LANDFIRE WUI controls", unit="shard", dynamic_ncols=True) as progress:
+                    for future in as_completed(futures):
+                        summary_rows.append(future.result())
+                        progress.update(1)
+
+            point_info = __import__("pyogrio").read_info(fire_point_path)
+            point_fields = list(point_info["fields"])
+            point_map = {field.casefold(): field for field in point_fields}
+            point_id_field = point_map.get("event_id") or point_map.get("fire_id")
+            point_year_field = point_map.get("year") or point_map.get("fire_year")
+            point_date_field = point_map.get("ig_date") or point_map.get("ignition_date")
+            if point_id_field is None or (point_year_field is None and point_date_field is None):
+                raise ValueError(
+                    f"MTBS fire points need EVENT_ID/FIRE_ID and YEAR/FIRE_YEAR or IG_DATE; "
+                    f"fields={point_fields}"
+                )
+            selected_point_fields = [point_id_field]
+            if point_year_field:
+                selected_point_fields.append(point_year_field)
+            elif point_date_field:
+                selected_point_fields.append(point_date_field)
+            tqdm.write("[progress] Reading MTBS fire-point records")
+            points = gpd.read_file(fire_point_path, columns=selected_point_fields, use_arrow=True)
+            points["fire_source_row_number"] = np.arange(1, len(points) + 1, dtype=np.int64)
+            if point_year_field:
+                point_years = pd.to_numeric(points[point_year_field], errors="coerce")
+            else:
+                raw_dates = points[point_date_field].astype("string").str.strip()
+                compact = raw_dates.str.fullmatch(r"\d{8}", na=False)
+                parsed = pd.to_datetime(raw_dates.mask(compact), errors="coerce")
+                if compact.any():
+                    parsed.loc[compact] = pd.to_datetime(raw_dates.loc[compact], format="%Y%m%d", errors="coerce")
+                point_years = parsed.dt.year
+            points["fire_year"] = pd.to_numeric(point_years, errors="coerce")
+            points["fire_event_id_normalized"] = points[point_id_field].map(functions.normalize_identifier)
+            points = points.loc[
+                points["fire_year"].between(*years)
+                & points["fire_event_id_normalized"].notna()
+                & points.geometry.notna()
+                & ~points.geometry.is_empty
+            ].copy()
+            if points.geometry.geom_type.ne("Point").any():
+                raise ValueError(f"MTBS fire-point layer contains non-Point geometries: {fire_point_path}")
+            if points.empty:
+                raise ValueError(f"No MTBS fire points in {years[0]}-{years[1]}: {fire_point_path}")
+            points = points.to_crs(raster_crs)
+            coordinates = list(zip(shapely.get_x(points.geometry.to_numpy()), shapely.get_y(points.geometry.to_numpy())))
+            point_values = functions.sample_landfire_terrain_points(coordinates, vrt_paths)
+            point_rows = pd.DataFrame({
+                "fire_source_row_number": points["fire_source_row_number"].to_numpy(dtype=np.int64),
+                "fire_event_id": points[point_id_field].astype("string").to_numpy(),
+                "fire_event_id_normalized": points["fire_event_id_normalized"].astype("string").to_numpy(),
+                "fire_year": points["fire_year"].to_numpy(dtype=np.int16),
+                "fire_anchor_type": "mtbs_centroid",
+                "landfire_raster_vintage": 2020,
+            })
+            point_rows["lf2020_elev_m"] = point_values["elev"]
+            point_rows["lf2020_slpd_degrees"] = point_values["slpd"]
+            point_rows["lf2020_asp_degrees"] = point_values["asp"]
+            point_rows["lf2020_asp_is_flat"] = point_rows["lf2020_asp_degrees"].eq(-1).astype("int8")
+            aspect_valid = point_rows["lf2020_asp_degrees"].between(0, 359)
+            theta = np.deg2rad(point_rows.loc[aspect_valid, "lf2020_asp_degrees"].to_numpy(dtype=float))
+            point_rows["lf2020_asp_northness"] = np.nan
+            point_rows["lf2020_asp_eastness"] = np.nan
+            point_rows.loc[aspect_valid, "lf2020_asp_northness"] = np.cos(theta)
+            point_rows.loc[aspect_valid, "lf2020_asp_eastness"] = np.sin(theta)
+            valid_layers = point_rows[["lf2020_elev_m", "lf2020_slpd_degrees"]].notna().sum(axis=1)
+            valid_layers += point_rows["lf2020_asp_degrees"].notna().astype(int)
+            point_rows["lf2020_status"] = np.select(
+                [valid_layers.eq(3), valid_layers.gt(0)], ["complete", "partial"], default="no_data"
+            )
+            functions.ensure_dir((temporary_dir / "fire_points").parent)
+            (temporary_dir / "fire_points").mkdir(parents=True, exist_ok=True)
+            point_rows.to_parquet(temporary_dir / "fire_points" / "fire_points.parquet", index=False, compression="zstd")
+            point_status = point_rows["lf2020_status"].value_counts()
+            summary_rows.append({
+                "level": "fire_points",
+                "wui_vintage_year": None,
+                "source_records": len(point_rows),
+                "complete_records": int(point_status.get("complete", 0)),
+                "partial_records": int(point_status.get("partial", 0)),
+                "no_data_records": int(point_status.get("no_data", 0)),
+                "input_path": str(fire_point_path),
+                "output_path": str(output_dir / "fire_points" / "fire_points.parquet"),
+            })
+            print(f"[progress] Fire-point controls: {len(point_rows):,} records; years={int(point_rows.fire_year.min())}-{int(point_rows.fire_year.max())}", flush=True)
+
+            perimeter_info = __import__("pyogrio").read_info(perimeter_path)
+            perimeter_fields = list(perimeter_info["fields"])
+            perimeter_map = {field.casefold(): field for field in perimeter_fields}
+            perimeter_id_field = perimeter_map.get("event_id") or perimeter_map.get("fire_id")
+            perimeter_year_field = perimeter_map.get("year") or perimeter_map.get("fire_year")
+            perimeter_date_field = perimeter_map.get("ig_date") or perimeter_map.get("ignition_date")
+            if perimeter_id_field is None or (perimeter_year_field is None and perimeter_date_field is None):
+                raise ValueError(
+                    f"MTBS perimeters need EVENT_ID/FIRE_ID and YEAR/FIRE_YEAR or IG_DATE; "
+                    f"fields={perimeter_fields}"
+                )
+            selected_perimeter_fields = [perimeter_id_field]
+            if perimeter_year_field:
+                selected_perimeter_fields.append(perimeter_year_field)
+            elif perimeter_date_field:
+                selected_perimeter_fields.append(perimeter_date_field)
+            tqdm.write("[progress] Reading MTBS burned-area perimeters")
+            perimeters = gpd.read_file(perimeter_path, columns=selected_perimeter_fields, use_arrow=True)
+            perimeters["fire_event_id_normalized"] = perimeters[perimeter_id_field].map(functions.normalize_identifier)
+            if perimeter_year_field:
+                perimeter_years = pd.to_numeric(perimeters[perimeter_year_field], errors="coerce")
+            else:
+                raw_dates = perimeters[perimeter_date_field].astype("string").str.strip()
+                compact = raw_dates.str.fullmatch(r"\d{8}", na=False)
+                parsed = pd.to_datetime(raw_dates.mask(compact), errors="coerce")
+                if compact.any():
+                    parsed.loc[compact] = pd.to_datetime(raw_dates.loc[compact], format="%Y%m%d", errors="coerce")
+                perimeter_years = parsed.dt.year
+            perimeters["fire_year"] = pd.to_numeric(perimeter_years, errors="coerce")
+            perimeters = perimeters.loc[
+                perimeters["fire_year"].between(*years)
+                & perimeters["fire_event_id_normalized"].notna()
+                & perimeters.geometry.notna()
+                & ~perimeters.geometry.is_empty
+            ].copy()
+            if perimeters.empty:
+                raise ValueError(f"No MTBS perimeters in {years[0]}-{years[1]}: {perimeter_path}")
+            perimeters = perimeters.to_crs(raster_crs)
+            perimeter_groups = []
+            for (fire_id, fire_year), group in perimeters.groupby(
+                ["fire_event_id_normalized", "fire_year"], sort=False
+            ):
+                geometries = group.geometry.to_numpy()
+                valid = shapely.is_valid(geometries)
+                if (~valid).any():
+                    geometries = geometries.copy()
+                    geometries[~valid] = shapely.make_valid(geometries[~valid])
+                polygon = shapely.union_all(geometries)
+                if polygon.geom_type not in {"Polygon", "MultiPolygon"}:
+                    polygon = shapely.union_all(
+                        [part for part in shapely.get_parts(polygon) if part.geom_type in {"Polygon", "MultiPolygon"}]
+                    )
+                if polygon.is_empty:
+                    continue
+                perimeter_groups.append((str(fire_id), int(fire_year), polygon))
+            if not perimeter_groups:
+                raise ValueError(f"No polygonal MTBS fire areas remain after grouping: {perimeter_path}")
+
+            area_rows = []
+            with tqdm(total=len(perimeter_groups), desc="LANDFIRE fire-area controls", unit="fire", dynamic_ncols=True) as progress:
+                for fire_id, fire_year, geometry in perimeter_groups:
+                    stats = functions.zonal_landfire_terrain_stats([geometry], vrt_paths)
+                    row = {
+                        "fire_event_id_normalized": fire_id,
+                        "fire_year": fire_year,
+                        "landfire_raster_vintage": 2020,
+                        "fire_area_m2": float(geometry.area),
+                    }
+                    row.update({f"lf2020_{name}": values[0] for name, values in stats.items()})
+                    layer_count = sum(
+                        int(row.get(f"lf2020_{field}", 0) > 0)
+                        for field in ("elev_valid_pixels", "slpd_valid_pixels", "asp_valid_pixels")
+                    )
+                    row["lf2020_status"] = "complete" if layer_count == 3 else ("partial" if layer_count else "no_data")
+                    area_rows.append(row)
+                    progress.update(1)
+            area_frame = pd.DataFrame(area_rows)
+            if area_frame.duplicated(["fire_event_id_normalized", "fire_year"]).any():
+                raise ValueError("MTBS fire-area output has duplicate event-year keys")
+            (temporary_dir / "fire_areas").mkdir(parents=True, exist_ok=True)
+            area_frame.to_parquet(temporary_dir / "fire_areas" / "fire_areas.parquet", index=False, compression="zstd")
+            area_status = area_frame["lf2020_status"].value_counts()
+            summary_rows.append({
+                "level": "fire_areas",
+                "wui_vintage_year": None,
+                "source_records": len(area_frame),
+                "complete_records": int(area_status.get("complete", 0)),
+                "partial_records": int(area_status.get("partial", 0)),
+                "no_data_records": int(area_status.get("no_data", 0)),
+                "input_path": str(perimeter_path),
+                "output_path": str(output_dir / "fire_areas" / "fire_areas.parquet"),
+            })
+
+        backup_dir = None
+        for row in summary_rows:
+            row.update({
+                "analysis_year_start": years[0],
+                "analysis_year_end": years[1],
+                "raster_vintage": 2020,
+                "elev_tile_count": tile_counts["elev"],
+                "asp_tile_count": tile_counts["asp"],
+                "slpd_tile_count": tile_counts["slpd"],
+                "elev_tile_dir": str(layer_dirs["elev"]),
+                "asp_tile_dir": str(layer_dirs["asp"]),
+                "slpd_tile_dir": str(layer_dirs["slpd"]),
+            })
+        summary_rows.sort(key=lambda row: (row["level"], row["wui_vintage_year"] or 0, row["input_path"]))
+        functions.write_csv(summary_rows, temporary_summary, fieldnames=summary_fields)
+        if output_dir.exists():
+            backup_dir = output_dir.with_name(f".{output_dir.name}.{os.getpid()}.old")
+            if backup_dir.exists():
+                shutil.rmtree(backup_dir)
+            output_dir.replace(backup_dir)
+            temporary_dir.replace(output_dir)
+            shutil.rmtree(backup_dir, ignore_errors=True)
+        else:
+            temporary_dir.replace(output_dir)
+        temporary_summary.replace(summary_path)
+    except BaseException:
+        shutil.rmtree(temporary_dir, ignore_errors=True)
+        temporary_summary.unlink(missing_ok=True)
+        if "backup_dir" in locals() and backup_dir is not None and backup_dir.exists() and not output_dir.exists():
+            backup_dir.replace(output_dir)
+        raise
+
+    wui_records = sum(row["source_records"] for row in summary_rows if row["level"] == "wui_singlepart")
+    print(f"[output] LANDFIRE controls: {output_dir}", flush=True)
+    print(f"[output] Summary: {summary_path}", flush=True)
+    print(
+        f"[result] WUI rows={wui_records:,}; fire-point rows={len(point_rows):,}; "
+        f"fire-area rows={len(area_frame):,}",
+        flush=True,
+    )
+    return {
+        "status": "built",
+        "dataset": output_dir,
+        "summary": summary_path,
+        "wui_records": wui_records,
+        "fire_point_records": len(point_rows),
+        "fire_area_records": len(area_frame),
     }
