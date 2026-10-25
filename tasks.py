@@ -1285,8 +1285,9 @@ def build_fire_wui_treatment_definitions(project):
     if perimeter_buffer_miles < 0:
         raise ValueError("fire_perimeter_threat_buffer_miles cannot be negative")
 
-    compute = functions.inspect_compute_capacity(memory_per_worker_gib=4.0, max_workers=8)
+    compute = functions.inspect_compute_capacity(memory_per_worker_gib=16.0, max_workers=24)
     workers = int(compute["workers"])
+    thickness_step_degrees = float(project.config.get("treatment_thickness_step_degrees", 0.25))
     print(f"[input] Fire-WUI paths: {path_root}; max distance={path_distance_miles:g} miles", flush=True)
     print(f"[input] Eligible FACTS: {treatment_path}", flush=True)
     treatments = gpd.read_parquet(treatment_path)
@@ -1344,11 +1345,14 @@ def build_fire_wui_treatment_definitions(project):
             path_path = path_dir / f"paths_part-{shard}"
             if not path_path.is_dir():
                 raise FileNotFoundError(
-                    f"Missing matching 10-mile path shard for WUI input {wui_path}: {path_path}"
+                    f"Missing matching {path_distance_miles:g}-mile path shard for WUI input "
+                    f"{wui_path}: {path_path}"
                 )
             source_files.append((vintage, wui_path, path_path))
     if not source_files:
-        raise FileNotFoundError(f"No matching 10-mile path/WUI shard pairs found under {path_root}")
+        raise FileNotFoundError(
+            f"No matching {path_distance_miles:g}-mile path/WUI shard pairs found under {path_root}"
+        )
 
     functions.ensure_dir(output_dir.parent)
     functions.ensure_dir(summary_path.parent)
@@ -1430,7 +1434,6 @@ def build_fire_wui_treatment_definitions(project):
 
         candidate_records = treatments.iloc[candidate_idx]
         candidate_geometries = treatment_geometries[candidate_idx]
-        memberships: list[list[bool | None]] = [[] for _ in windows]
         completion_date = pair.get("fire_ig_date")
         if completion_date is None or pd.isna(completion_date):
             completion_date = pair.get("fire_ignition_date")
@@ -1439,78 +1442,113 @@ def build_fire_wui_treatment_definitions(project):
             raise ValueError(f"Fire-WUI pair lacks fire year: {pair.get('path_id')}")
         if fire_id is None:
             raise ValueError(f"Fire-WUI pair lacks MTBS event ID: {pair.get('path_id')}")
-        for _, treatment in candidate_records.iterrows():
-            precision = str(treatment.get("treatment_date_precision", "unknown"))
-            for window_idx, window in enumerate(windows):
-                memberships[window_idx].append(
-                    functions.treatment_window_membership(
-                        treatment.get("treatment_completed_date"),
-                        treatment.get("treatment_completed_year"),
-                        completion_date,
-                        fire_year,
-                        window,
-                        date_precision=precision,
-                    )
+        candidate_count = len(candidate_records)
+        candidate_dates = candidate_records.get(
+            "treatment_completed_date", pd.Series([None] * candidate_count)
+        ).tolist()
+        candidate_years = candidate_records.get(
+            "treatment_completed_year", pd.Series([None] * candidate_count)
+        ).tolist()
+        candidate_precisions = candidate_records.get(
+            "treatment_date_precision", pd.Series(["unknown"] * candidate_count)
+        ).tolist()
+        memberships = functions.treatment_window_membership_matrix(
+            candidate_dates,
+            candidate_years,
+            candidate_precisions,
+            completion_date,
+            fire_year,
+            windows,
+        )
+        candidate_ids = [
+            functions.normalize_identifier(value)
+            for value in candidate_records.get("treatment_record_id", pd.Series([None] * candidate_count)).tolist()
+        ]
+        candidate_categories = candidate_records.get(
+            "treatment_category_clean", pd.Series([None] * candidate_count)
+        ).tolist()
+        candidate_path_hits = (
+            np.asarray(shapely.intersects(candidate_geometries, path_geometry), dtype=bool)
+            if candidate_count
+            else np.empty(0, dtype=bool)
+        )
+        union_cache = {}
+        path_summary_cache = {}
+        angular_cache = {}
+
+        def cached_union(local_indices):
+            key = tuple(local_indices)
+            if key not in union_cache:
+                selected_geometries = [candidate_geometries[index] for index in key]
+                union_cache[key] = (
+                    shapely.union_all(selected_geometries)
+                    if selected_geometries
+                    else shapely.GeometryCollection()
                 )
+            return key, union_cache[key]
+
+        def cached_path_summary(key, treatment_union):
+            if key not in path_summary_cache:
+                intersects = bool(
+                    not shapely.is_empty(treatment_union)
+                    and path_geometry.intersects(treatment_union)
+                )
+                length = (
+                    float(path_geometry.intersection(treatment_union).length)
+                    if not shapely.is_empty(treatment_union)
+                    else 0.0
+                )
+                path_summary_cache[key] = (intersects, length)
+            return path_summary_cache[key]
+
+        def cached_angular(key, treatment_union, compute_thickness):
+            cache_key = (key, bool(compute_thickness))
+            if cache_key not in angular_cache:
+                angular_cache[cache_key] = functions.angular_treatment_metrics(
+                    origin,
+                    wui,
+                    [treatment_union] if not shapely.is_empty(treatment_union) else [],
+                    thickness_step_degrees=thickness_step_degrees,
+                    compute_thickness_when_full=compute_thickness,
+                )
+            return angular_cache[cache_key]
 
         output_rows = []
         for window_idx, window in enumerate(windows):
-            membership = memberships[window_idx]
-            known_local_idx = [index for index, value in enumerate(membership) if value is True]
-            uncertain_local_idx = [index for index, value in enumerate(membership) if value is None]
-            selected_geometries = [candidate_geometries[index] for index in known_local_idx]
-            treatment_union = shapely.union_all(selected_geometries) if selected_geometries else shapely.GeometryCollection()
-            known_path_intersection = bool(not shapely.is_empty(treatment_union) and path_geometry.intersects(treatment_union))
-            path_length = float(path_geometry.intersection(treatment_union).length) if not shapely.is_empty(treatment_union) else 0.0
-            uncertain_path_hit = any(
-                path_geometry.intersects(candidate_geometries[index]) for index in uncertain_local_idx
-            )
-            possible_geometries = [
-                *selected_geometries,
-                *(candidate_geometries[index] for index in uncertain_local_idx),
-            ]
-            possible_union = shapely.union_all(possible_geometries) if possible_geometries else shapely.GeometryCollection()
+            membership = memberships[:, window_idx]
+            known_local_idx = np.flatnonzero(np.equal(membership, True)).tolist()
+            uncertain_local_idx = np.flatnonzero(np.equal(membership, None)).tolist()
+            union_key, treatment_union = cached_union(known_local_idx)
+            known_path_intersection, path_length = cached_path_summary(union_key, treatment_union)
+            uncertain_path_hit = bool(candidate_path_hits[uncertain_local_idx].any())
+            possible_coverage = None
+            if uncertain_local_idx:
+                possible_local_idx = sorted((*known_local_idx, *uncertain_local_idx))
+                possible_key, possible_union = cached_union(possible_local_idx)
+                possible_angular = cached_angular(possible_key, possible_union, False)
+                possible_coverage = possible_angular["angular_coverage_fraction"]
             if known_path_intersection:
                 nearest_status = "treated"
             elif uncertain_path_hit:
                 nearest_status = "unknown"
             else:
                 nearest_status = "control"
-            angular = functions.angular_treatment_metrics(
-                origin,
-                wui,
-                [treatment_union] if not shapely.is_empty(treatment_union) else [],
-                thickness_step_degrees=float(project.config.get("treatment_thickness_step_degrees", 0.25)),
-            )
+            angular = cached_angular(union_key, treatment_union, True)
             coverage = angular["angular_coverage_fraction"]
-            if uncertain_local_idx:
-                possible_angular = functions.angular_treatment_metrics(
-                    origin,
-                    wui,
-                    [possible_union] if not shapely.is_empty(possible_union) else [],
-                    compute_thickness_when_full=False,
-                )
-                possible_coverage = possible_angular["angular_coverage_fraction"]
-            else:
+            if not uncertain_local_idx:
                 possible_coverage = coverage
             date_complete = len(uncertain_local_idx) == 0
-            known_treatment_ids = [
-                functions.normalize_identifier(candidate_records.iloc[index].get("treatment_record_id"))
-                for index in known_local_idx
-            ]
-            uncertain_treatment_ids = [
-                functions.normalize_identifier(candidate_records.iloc[index].get("treatment_record_id"))
-                for index in uncertain_local_idx
-            ]
+            known_treatment_ids = [candidate_ids[index] for index in known_local_idx]
+            uncertain_treatment_ids = [candidate_ids[index] for index in uncertain_local_idx]
             path_treatment_ids = [
-                functions.normalize_identifier(candidate_records.iloc[index].get("treatment_record_id"))
+                candidate_ids[index]
                 for index in known_local_idx
-                if path_geometry.intersects(candidate_geometries[index])
+                if candidate_path_hits[index]
             ]
             category_names = sorted({
-                str(candidate_records.iloc[index].get("treatment_category_clean"))
+                str(candidate_categories[index])
                 for index in known_local_idx
-                if pd.notna(candidate_records.iloc[index].get("treatment_category_clean"))
+                if pd.notna(candidate_categories[index])
             })
             result = {
                 **base,

@@ -11,6 +11,7 @@ Contents:
 - normalize_identifier: normalize event and activity IDs for cross-layer joins
 - build_treatment_time_windows: build configurable calendar, cumulative, and lag-band windows
 - treatment_window_membership: classify exact or year-only treatment dates against a window
+- treatment_window_membership_matrix: classify candidate treatments across all windows in vectorized batches
 - angular_treatment_metrics: measure WUI-facing angular treatment coverage and thickness
 - write_csv: write CSV atomically
 - should_skip, skip_task: skip-if-existing logic and log message
@@ -643,6 +644,137 @@ def treatment_window_membership(
     if disjoint:
         return False
     return None
+
+
+def treatment_window_membership_matrix(
+    completion_dates: Sequence[object],
+    completion_years: Sequence[object],
+    date_precisions: Sequence[object],
+    fire_date: object,
+    fire_year: object,
+    windows: Sequence[Mapping[str, object]],
+) -> object:
+    """Classify many candidate dates against every window with vectorized comparisons."""
+    import numpy as np
+    import pandas as pd
+
+    count = len(completion_dates)
+    if len(completion_years) != count or len(date_precisions) != count:
+        raise ValueError("Treatment date, year, and precision arrays must have equal lengths")
+    memberships = np.full((count, len(windows)), None, dtype=object)
+    if not count or not windows:
+        return memberships
+
+    completion = pd.to_datetime(pd.Series(completion_dates), errors="coerce")
+    completion_valid = completion.notna().to_numpy()
+    fire = pd.to_datetime(fire_date, errors="coerce")
+    fire_valid = pd.notna(fire)
+    precisions = np.asarray([str(value) for value in date_precisions], dtype=object)
+    exact_mask = (precisions == "exact") & completion_valid & fire_valid
+    before_fire = (completion < fire).fillna(False).to_numpy(dtype=bool)
+
+    year_numbers = pd.to_numeric(pd.Series(completion_years), errors="coerce").to_numpy(dtype=float)
+    finite_years = np.isfinite(year_numbers)
+    year_ints = np.zeros(count, dtype=np.int64)
+    year_ints[finite_years] = np.trunc(year_numbers[finite_years]).astype(np.int64)
+    year_valid = finite_years & (year_ints >= 1900) & (year_ints <= 2100)
+    try:
+        event_year = int(fire_year)
+        fire_year_valid = 1900 <= event_year <= 2100
+    except (TypeError, ValueError, OverflowError):
+        event_year = 0
+        fire_year_valid = False
+
+    calendar_start = np.full(count, np.datetime64("NaT"), dtype="datetime64[ns]")
+    calendar_end = np.full(count, np.datetime64("NaT"), dtype="datetime64[ns]")
+    fiscal_start = np.full(count, np.datetime64("NaT"), dtype="datetime64[ns]")
+    fiscal_end = np.full(count, np.datetime64("NaT"), dtype="datetime64[ns]")
+    valid_indices = np.flatnonzero(year_valid)
+    if len(valid_indices):
+        valid_year_values = year_ints[valid_indices]
+        calendar_start[valid_indices] = pd.to_datetime({
+            "year": valid_year_values,
+            "month": np.ones(len(valid_indices), dtype=np.int64),
+            "day": np.ones(len(valid_indices), dtype=np.int64),
+        }).to_numpy(dtype="datetime64[ns]")
+        calendar_end[valid_indices] = pd.to_datetime({
+            "year": valid_year_values + 1,
+            "month": np.ones(len(valid_indices), dtype=np.int64),
+            "day": np.ones(len(valid_indices), dtype=np.int64),
+        }).to_numpy(dtype="datetime64[ns]")
+        fiscal_start[valid_indices] = pd.to_datetime({
+            "year": valid_year_values - 1,
+            "month": np.full(len(valid_indices), 10, dtype=np.int64),
+            "day": np.ones(len(valid_indices), dtype=np.int64),
+        }).to_numpy(dtype="datetime64[ns]")
+        fiscal_end[valid_indices] = pd.to_datetime({
+            "year": valid_year_values,
+            "month": np.full(len(valid_indices), 10, dtype=np.int64),
+            "day": np.ones(len(valid_indices), dtype=np.int64),
+        }).to_numpy(dtype="datetime64[ns]")
+
+    year_precision = year_valid & fire_year_valid
+    fallback_supported = year_precision & np.isin(precisions, ("calendar_year", "fiscal_year"))
+    fallback_indices = np.flatnonzero(fallback_supported)
+    fire_anchor = fire if fire_valid else (pd.Timestamp(year=event_year, month=7, day=1) if fire_year_valid else None)
+
+    for window_idx, window in enumerate(windows):
+        kind = str(window["kind"])
+        if fire_valid:
+            if kind == "previous_calendar_year":
+                start = pd.Timestamp(year=fire.year - 1, month=1, day=1)
+                end = pd.Timestamp(year=fire.year, month=1, day=1)
+            elif kind == "rolling":
+                start = fire - pd.DateOffset(years=int(window["max_years"]))
+                end = fire
+            elif kind == "lag_band":
+                start = fire - pd.DateOffset(years=int(window["max_years"]))
+                end = fire - pd.DateOffset(years=int(window["min_years"]))
+            else:
+                raise ValueError(f"Unknown treatment window kind: {kind}")
+            if kind == "lag_band":
+                exact_inside = (completion > start) & (completion <= end) & before_fire
+            else:
+                exact_inside = (completion >= start) & (completion < end) & before_fire
+            memberships[exact_mask, window_idx] = exact_inside.to_numpy(dtype=bool)[exact_mask]
+
+        if not len(fallback_indices):
+            continue
+        if fire_anchor is None:
+            continue
+        if kind == "previous_calendar_year":
+            start = pd.Timestamp(year=event_year - 1, month=1, day=1)
+            end = pd.Timestamp(year=event_year, month=1, day=1)
+        elif kind == "rolling":
+            start = fire_anchor - pd.DateOffset(years=int(window["max_years"]))
+            end = fire_anchor
+        elif kind == "lag_band":
+            start = fire_anchor - pd.DateOffset(years=int(window["max_years"]))
+            end = fire_anchor - pd.DateOffset(years=int(window["min_years"]))
+        else:
+            raise ValueError(f"Unknown treatment window kind: {kind}")
+
+        window_start = np.datetime64(start.to_datetime64(), "ns")
+        window_end = np.datetime64(end.to_datetime64(), "ns")
+        for precision, starts, ends in (
+            ("calendar_year", calendar_start, calendar_end),
+            ("fiscal_year", fiscal_start, fiscal_end),
+        ):
+            indices = fallback_indices[precisions[fallback_indices] == precision]
+            if not len(indices):
+                continue
+            candidate_starts = starts[indices]
+            candidate_ends = ends[indices]
+            if kind == "lag_band":
+                wholly_inside = (candidate_starts > window_start) & (candidate_ends <= window_end)
+                disjoint = (candidate_ends <= window_start) | (candidate_starts > window_end)
+            else:
+                wholly_inside = (candidate_starts >= window_start) & (candidate_ends <= window_end)
+                disjoint = (candidate_ends <= window_start) | (candidate_starts >= window_end)
+            memberships[indices[wholly_inside], window_idx] = True
+            memberships[indices[disjoint], window_idx] = False
+
+    return memberships
 
 
 def normalize_identifier(value: object) -> str | None:
