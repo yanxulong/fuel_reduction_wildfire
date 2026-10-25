@@ -2,6 +2,7 @@
 
 Contents:
 - build_wui_singlepart_dataset: combine 2000, 2010, and 2020 WUI blocks as single-part records
+- build_fire_wui_geometry_characteristics: create stand-alone MTBS point, fire-perimeter, and WUI polygon characteristic tables
 - build_fire_wui_centroid_paths: link MTBS fire centroids to WUI single-part edges within a configurable radius
 - build_fire_wui_centroid_path_distance_samples: build path datasets for 1 to 10 miles
 - build_wui_annual_mtbs_outcomes: calculate annual burn, area, and severity for WUI single parts
@@ -256,6 +257,398 @@ def build_wui_singlepart_dataset(project):
     print(f"[output] Single-part WUI dataset: {output_dir}")
     print(f"[output] Vintage summary: {summary_path}")
     return {"status": "built", "dataset": output_dir, "summary": summary_path}
+
+
+def build_fire_wui_geometry_characteristics(project):
+    """Write descriptive characteristics for MTBS points/perimeters and WUI single-part polygons."""
+    functions.configure_geospatial_environment()
+
+    import os
+    import shutil
+    import tempfile
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from pathlib import Path
+
+    import geopandas as gpd
+    import numpy as np
+    import pandas as pd
+    import pyogrio
+    import shapely
+    from tqdm import tqdm
+
+    analysis_start_year = 2000
+    analysis_end_year = 2025
+    singlepart_root = project.paths["wui_singlepart_dataset"]
+    point_path = functions.find_fire_point_source(project.paths["mtbs_fod_points_candidates"])
+    perimeter_path = functions.find_spatial_source(
+        project.paths["mtbs_perimeter_candidates"],
+        project.paths.get(
+            "mtbs_search_roots",
+            (project.paths["raw"] / "MTBS", project.paths["data_archive"] / "raw" / "MTBS"),
+        ),
+        "mtbs_perims_DD.shp",
+        require_attribute_table=True,
+    )
+    output_dir = project.paths["fire_wui_geometry_characteristics_dataset"]
+    summary_path = project.paths["fire_wui_geometry_characteristics_summary"]
+    overwrite = bool(project.config.get("overwrite_existing", False))
+
+    if not singlepart_root.is_dir():
+        raise FileNotFoundError(
+            f"Missing WUI single-part dataset: {singlepart_root}. Run build_wui_singlepart_dataset first."
+        )
+    wui_inputs = []
+    for vintage in (2000, 2010, 2020):
+        shard_paths = sorted((singlepart_root / f"year_{vintage}").glob("part-*.parquet"))
+        if not shard_paths:
+            raise FileNotFoundError(f"No WUI single-part Parquet shards found for vintage {vintage}")
+        for shard_path in shard_paths:
+            wui_inputs.append((vintage, shard_path))
+
+    point_output_rel = Path("fire_points/mtbs_fod_points_2000_2025.parquet")
+    perimeter_output_rel = Path("fire_perimeters/mtbs_perimeter_events_2000_2025.parquet")
+    wui_output_rels = [
+        Path("wui_polygons") / f"year_{vintage}" / shard_path.name
+        for vintage, shard_path in wui_inputs
+    ]
+    expected_outputs = [point_output_rel, perimeter_output_rel, *wui_output_rels]
+    complete = (
+        summary_path.is_file()
+        and summary_path.stat().st_size > 0
+        and all(
+            (output_dir / relative).is_file() and (output_dir / relative).stat().st_size > 0
+            for relative in expected_outputs
+        )
+    )
+    if complete and not overwrite:
+        functions.skip_task(
+            "build_fire_wui_geometry_characteristics",
+            output_dir,
+            summary_path,
+        )
+        return {"status": "skipped", "dataset": output_dir, "summary": summary_path}
+
+    compute = functions.inspect_compute_capacity(memory_per_worker_gib=6.0, max_workers=8)
+    workers = int(compute["workers"])
+    print(
+        f"[input] MTBS Fire Occurrence points: {point_path}\n"
+        f"[input] MTBS perimeters: {perimeter_path}\n"
+        f"[input] WUI single-part shards: {len(wui_inputs):,}\n"
+        f"[capacity] CPUs={compute['cpus']}; total_ram_gib={compute['total_ram_gib']:.1f}; "
+        f"available_ram_gib={compute['available_ram_gib']:.1f}; workers={workers}",
+        flush=True,
+    )
+
+    functions.ensure_dir(output_dir.parent)
+    functions.ensure_dir(summary_path.parent)
+    stage_root = Path(tempfile.mkdtemp(prefix=".fire_wui_geometry_characteristics.", dir=output_dir.parent))
+    staged_dataset = stage_root / "dataset"
+    staged_summary = stage_root / "summary.csv"
+    functions.ensure_dir(staged_dataset)
+    summary_rows = []
+
+    try:
+        point_info = pyogrio.read_info(point_path)
+        point_fields = list(point_info.get("fields", []))
+        point_field_map = {field.casefold(): field for field in point_fields}
+        point_id_field = next(
+            (point_field_map[key] for key in ("event_id", "fire_id") if key in point_field_map),
+            None,
+        )
+        point_year_field = next(
+            (point_field_map[key] for key in ("year", "fire_year") if key in point_field_map),
+            None,
+        )
+        point_date_field = next(
+            (point_field_map[key] for key in ("ig_date", "ignition_date") if key in point_field_map),
+            None,
+        )
+        if point_id_field is None:
+            raise ValueError(f"MTBS Fire Occurrence point layer lacks EVENT_ID/FIRE_ID: {point_fields}")
+        if point_year_field is None and point_date_field is None:
+            raise ValueError(f"MTBS point layer lacks YEAR/FIRE_YEAR or IG_DATE/IGNITION_DATE: {point_fields}")
+
+        print("[progress] Reading MTBS Fire Occurrence points", flush=True)
+        points = gpd.read_file(point_path, use_arrow=True)
+        if points.crs is None:
+            raise ValueError(f"MTBS Fire Occurrence points have no CRS: {point_path}")
+        point_source_crs = str(points.crs)
+        source_point_count = len(points)
+        points["fire_source_row_number"] = np.arange(1, source_point_count + 1, dtype=np.int64)
+        if point_year_field is not None:
+            point_years = pd.to_numeric(points[point_year_field], errors="coerce")
+        else:
+            point_years = pd.to_datetime(points[point_date_field], errors="coerce").dt.year
+        points["fire_year"] = point_years
+        points["fire_event_id_normalized"] = points[point_id_field].map(functions.normalize_identifier)
+        point_geometries = points.geometry.to_numpy()
+        point_geometry_ok = np.asarray(
+            [geometry is not None and not shapely.is_empty(geometry) for geometry in point_geometries],
+            dtype=bool,
+        )
+        in_year_window = points["fire_year"].between(analysis_start_year, analysis_end_year).fillna(False).to_numpy()
+        keep_points = point_geometry_ok & in_year_window
+        excluded_point_count = int((~keep_points).sum())
+        points = points.loc[keep_points].copy().reset_index(drop=True)
+        if points.empty:
+            raise ValueError(f"No valid MTBS Fire Occurrence points fall in {analysis_start_year}-{analysis_end_year}")
+        points["fire_year"] = points["fire_year"].astype("int16")
+        points = points.to_crs(5070)
+        point_geometries = points.geometry.to_numpy()
+        points["fire_anchor_type"] = "mtbs_centroid"
+        points["fire_point_interpretation"] = "MTBS Fire Occurrence perimeter centroid; not verified ignition location"
+        points["fire_point_x_m"] = shapely.get_x(point_geometries)
+        points["fire_point_y_m"] = shapely.get_y(point_geometries)
+        lonlat_geometries = points.to_crs(4326).geometry.to_numpy()
+        points["fire_point_longitude"] = shapely.get_x(lonlat_geometries)
+        points["fire_point_latitude"] = shapely.get_y(lonlat_geometries)
+        point_event_counts = (
+            points.dropna(subset=["fire_event_id_normalized"])
+            .groupby("fire_event_id_normalized", sort=False)
+            .size()
+            .to_dict()
+        )
+        point_event_years = (
+            points.dropna(subset=["fire_event_id_normalized"])
+            .groupby("fire_event_id_normalized", sort=False)["fire_year"]
+            .first()
+            .to_dict()
+        )
+        point_event_ids = set(point_event_counts)
+        point_output = staged_dataset / point_output_rel
+        functions.ensure_dir(point_output.parent)
+        points.drop(columns=[points.geometry.name]).to_parquet(
+            point_output,
+            index=False,
+            compression="zstd",
+        )
+        summary_rows.append({
+            "layer": "fire_points",
+            "vintage_year": "all",
+            "source_path": str(point_path),
+            "output_path": str(output_dir / point_output_rel),
+            "source_crs": point_source_crs,
+            "metric_crs": "EPSG:5070",
+            "source_rows": source_point_count,
+            "output_rows": len(points),
+            "excluded_rows": excluded_point_count,
+            "invalid_geometry_count": int((~point_geometry_ok).sum()),
+            "analysis_year_start": analysis_start_year,
+            "analysis_year_end": analysis_end_year,
+            "notes": "Points labeled MTBS centroids; source does not establish true ignition locations.",
+        })
+
+        perimeter_info = pyogrio.read_info(perimeter_path)
+        perimeter_fields = list(perimeter_info.get("fields", []))
+        perimeter_field_map = {field.casefold(): field for field in perimeter_fields}
+        perimeter_id_field = next(
+            (perimeter_field_map[key] for key in ("event_id", "fire_id") if key in perimeter_field_map),
+            None,
+        )
+        perimeter_year_field = next(
+            (perimeter_field_map[key] for key in ("year", "fire_year") if key in perimeter_field_map),
+            None,
+        )
+        if perimeter_id_field is None:
+            raise ValueError(f"MTBS perimeter layer lacks EVENT_ID/FIRE_ID: {perimeter_fields}")
+        perimeter_columns = [perimeter_id_field]
+        if perimeter_year_field is not None and perimeter_year_field not in perimeter_columns:
+            perimeter_columns.append(perimeter_year_field)
+        print(
+            f"[progress] Reading MTBS perimeter features; event field={perimeter_id_field}; "
+            f"year field={perimeter_year_field or 'matched from point records'}",
+            flush=True,
+        )
+        perimeters = gpd.read_file(perimeter_path, columns=perimeter_columns, use_arrow=True)
+        if perimeters.crs is None:
+            raise ValueError(f"MTBS perimeter layer has no CRS: {perimeter_path}")
+        perimeter_source_crs = str(perimeters.crs)
+        perimeters = perimeters.to_crs(5070)
+        source_perimeter_count = len(perimeters)
+        perimeters["fire_event_id_normalized"] = perimeters[perimeter_id_field].map(functions.normalize_identifier)
+        if perimeter_year_field is not None:
+            perimeters["fire_year"] = pd.to_numeric(perimeters[perimeter_year_field], errors="coerce")
+        else:
+            perimeters["fire_year"] = np.nan
+        perimeters["fire_year"] = perimeters["fire_year"].fillna(
+            perimeters["fire_event_id_normalized"].map(point_event_years)
+        )
+        perimeters = perimeters.loc[
+            perimeters["fire_event_id_normalized"].notna()
+            & perimeters["fire_year"].between(analysis_start_year, analysis_end_year).fillna(False)
+            & perimeters.geometry.notna()
+            & ~perimeters.geometry.is_empty
+        ].copy()
+        unmatched_event_count = int(
+            (~perimeters["fire_event_id_normalized"].isin(point_event_ids)).groupby(
+                perimeters["fire_event_id_normalized"]
+            ).any().sum()
+        )
+        perimeter_records = []
+        perimeter_groups = perimeters.groupby("fire_event_id_normalized", sort=False)
+        with tqdm(
+            total=perimeter_groups.ngroups,
+            desc="Dissolving MTBS fire perimeters",
+            unit="event",
+            dynamic_ncols=True,
+        ) as progress:
+            for fire_id, group in perimeter_groups:
+                geometries = group.geometry.to_numpy()
+                valid = np.asarray(shapely.is_valid(geometries), dtype=bool)
+                repaired_count = int((~valid).sum())
+                if repaired_count:
+                    geometries = geometries.copy()
+                    geometries[~valid] = shapely.make_valid(geometries[~valid])
+                dissolved = shapely.union_all(geometries)
+                if dissolved is None or shapely.is_empty(dissolved):
+                    progress.update(1)
+                    continue
+                geometry_metrics = functions.polygon_geometry_characteristics(
+                    [dissolved],
+                    prefix="fire_perimeter",
+                )
+                year_values = pd.to_numeric(group["fire_year"], errors="coerce").dropna()
+                perimeter_records.append({
+                    "fire_event_id_normalized": fire_id,
+                    "fire_event_id_source": str(group[perimeter_id_field].iloc[0]),
+                    "fire_year": int(year_values.iloc[0]) if len(year_values) else None,
+                    "fire_point_record_count": int(point_event_counts.get(fire_id, 0)),
+                    "perimeter_source_feature_count": len(group),
+                    "perimeter_source_invalid_geometry_count": repaired_count,
+                    **{key: value[0] for key, value in geometry_metrics.items()},
+                })
+                progress.update(1)
+        perimeter_frame = pd.DataFrame(perimeter_records)
+        perimeter_output = staged_dataset / perimeter_output_rel
+        functions.ensure_dir(perimeter_output.parent)
+        perimeter_frame.to_parquet(perimeter_output, index=False, compression="zstd")
+        summary_rows.append({
+            "layer": "fire_perimeters",
+            "vintage_year": "all",
+            "source_path": str(perimeter_path),
+            "output_path": str(output_dir / perimeter_output_rel),
+            "source_crs": perimeter_source_crs,
+            "metric_crs": "EPSG:5070",
+            "source_rows": source_perimeter_count,
+            "output_rows": len(perimeter_frame),
+            "excluded_rows": source_perimeter_count - len(perimeters),
+            "invalid_geometry_count": int(perimeter_frame.get(
+                "perimeter_source_invalid_geometry_count", pd.Series(dtype="int64")
+            ).sum()),
+            "analysis_year_start": analysis_start_year,
+            "analysis_year_end": analysis_end_year,
+            "notes": f"Dissolved by normalized event ID; events without a matching point: {unmatched_event_count}.",
+        })
+        del perimeters
+
+        def process_wui_shard(task):
+            vintage, input_path = task
+            frame = gpd.read_parquet(input_path)
+            if frame.crs is None:
+                raise ValueError(f"WUI single-part shard has no CRS: {input_path}")
+            source_crs = str(frame.crs)
+            required = {"wui_single_part_id", "wui_source_row_number", "wui_single_part_number", "year"}
+            missing = sorted(required.difference(frame.columns))
+            if missing:
+                raise ValueError(f"WUI shard lacks required identifiers {missing}: {input_path}")
+            if not frame.empty and not frame["year"].eq(vintage).all():
+                raise ValueError(f"WUI vintage mismatch in shard expected={vintage}: {input_path}")
+            frame = frame.to_crs(5070)
+            metrics = functions.polygon_geometry_characteristics(
+                frame.geometry.to_numpy(),
+                prefix="wui",
+            )
+            for column, values in metrics.items():
+                frame[column] = values
+            frame["wui_vintage_year"] = np.int16(vintage)
+            frame = frame.rename(columns={"year": "wui_source_year"})
+            output_relative = Path("wui_polygons") / f"year_{vintage}" / input_path.name
+            shard_output = staged_dataset / output_relative
+            functions.ensure_dir(shard_output.parent)
+            frame.drop(columns=[frame.geometry.name]).to_parquet(
+                shard_output,
+                index=False,
+                compression="zstd",
+            )
+            invalid_count = int((~np.asarray(metrics["wui_geometry_is_valid"], dtype=bool)).sum())
+            return {
+                "layer": "wui_polygons",
+                "vintage_year": vintage,
+                "source_path": str(input_path),
+                "output_path": str(output_dir / output_relative),
+                "source_crs": source_crs,
+                "metric_crs": "EPSG:5070",
+                "source_rows": len(frame),
+                "output_rows": len(frame),
+                "excluded_rows": 0,
+                "invalid_geometry_count": invalid_count,
+                "analysis_year_start": analysis_start_year,
+                "analysis_year_end": analysis_end_year,
+                "notes": "Source attributes and IDs retained; geometry summarized and omitted from compact output.",
+            }
+
+        print("[progress] Summarizing WUI polygon shards", flush=True)
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = [executor.submit(process_wui_shard, item) for item in wui_inputs]
+            with tqdm(total=len(futures), desc="WUI characteristics", unit="shard", dynamic_ncols=True) as progress:
+                for future in as_completed(futures):
+                    summary_rows.append(future.result())
+                    progress.update(1)
+
+        summary_fields = (
+            "layer",
+            "vintage_year",
+            "source_path",
+            "output_path",
+            "source_crs",
+            "metric_crs",
+            "source_rows",
+            "output_rows",
+            "excluded_rows",
+            "invalid_geometry_count",
+            "analysis_year_start",
+            "analysis_year_end",
+            "notes",
+        )
+        functions.write_csv(summary_rows, staged_summary, fieldnames=summary_fields)
+
+        backup_dataset = output_dir.with_name(f".{output_dir.name}.{os.getpid()}.backup")
+        backup_summary = summary_path.with_name(f".{summary_path.name}.{os.getpid()}.backup")
+        if backup_dataset.exists():
+            shutil.rmtree(backup_dataset)
+        backup_dataset_exists = output_dir.exists()
+        backup_summary_exists = summary_path.exists()
+        if backup_dataset_exists:
+            output_dir.replace(backup_dataset)
+        if backup_summary_exists:
+            summary_path.replace(backup_summary)
+        try:
+            staged_dataset.replace(output_dir)
+            staged_summary.replace(summary_path)
+        except BaseException:
+            if output_dir.exists():
+                shutil.rmtree(output_dir, ignore_errors=True)
+            if summary_path.exists():
+                summary_path.unlink(missing_ok=True)
+            if backup_dataset_exists and backup_dataset.exists():
+                backup_dataset.replace(output_dir)
+            if backup_summary_exists and backup_summary.exists():
+                backup_summary.replace(summary_path)
+            raise
+        if backup_dataset.exists():
+            shutil.rmtree(backup_dataset)
+        if backup_summary.exists():
+            backup_summary.unlink()
+    except BaseException:
+        shutil.rmtree(stage_root, ignore_errors=True)
+        raise
+    shutil.rmtree(stage_root, ignore_errors=True)
+
+    layer_totals = pd.DataFrame(summary_rows).groupby("layer", dropna=False)["output_rows"].sum().to_dict()
+    print(f"[output] Geometry characteristics: {output_dir}")
+    print(f"[output] Summary: {summary_path}")
+    print(f"[result] rows={layer_totals}", flush=True)
+    return {"status": "built", "dataset": output_dir, "summary": summary_path, "rows": layer_totals}
 
 
 def build_fire_wui_centroid_paths(project):

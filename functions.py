@@ -12,6 +12,7 @@ Contents:
 - build_treatment_time_windows: build configurable calendar, cumulative, and lag-band windows
 - treatment_window_membership: classify exact or year-only treatment dates against a window
 - treatment_window_membership_matrix: classify candidate treatments across all windows in vectorized batches
+- polygon_geometry_characteristics: calculate vectorized polygon size, shape, bounds, centroid, and validity
 - angular_treatment_metrics: measure WUI-facing angular treatment coverage and thickness
 - write_csv: write CSV atomically
 - should_skip, skip_task: skip-if-existing logic and log message
@@ -871,6 +872,46 @@ def find_spatial_source(
             else ""
         )
     )
+
+
+def polygon_geometry_characteristics(geometries, *, prefix: str) -> dict[str, object]:
+    """Return vectorized polygon metrics for projected geometries with meter units."""
+    import numpy as np
+    import shapely
+
+    geometry_array = np.asarray(geometries, dtype=object)
+    area_m2 = np.asarray(shapely.area(geometry_array), dtype=np.float64)
+    perimeter_m = np.asarray(shapely.length(geometry_array), dtype=np.float64)
+    centroid = shapely.centroid(geometry_array)
+    centroid_x_m = np.asarray(shapely.get_x(centroid), dtype=np.float64)
+    centroid_y_m = np.asarray(shapely.get_y(centroid), dtype=np.float64)
+    bounds = np.asarray(shapely.bounds(geometry_array), dtype=np.float64)
+    if bounds.size == 0:
+        bounds = np.empty((0, 4), dtype=np.float64)
+    elif bounds.ndim == 1:
+        bounds = bounds.reshape(1, 4)
+    width_m = bounds[:, 2] - bounds[:, 0]
+    height_m = bounds[:, 3] - bounds[:, 1]
+    compactness = np.full(len(geometry_array), np.nan, dtype=np.float64)
+    usable_perimeter = np.isfinite(perimeter_m) & (perimeter_m > 0) & np.isfinite(area_m2)
+    compactness[usable_perimeter] = (
+        4.0 * np.pi * area_m2[usable_perimeter] / np.square(perimeter_m[usable_perimeter])
+    )
+    valid = np.asarray(shapely.is_valid(geometry_array), dtype=bool)
+
+    return {
+        f"{prefix}_area_m2": area_m2,
+        f"{prefix}_area_km2": area_m2 / 1_000_000.0,
+        f"{prefix}_area_acres": area_m2 / 4046.8564224,
+        f"{prefix}_perimeter_m": perimeter_m,
+        f"{prefix}_perimeter_km": perimeter_m / 1000.0,
+        f"{prefix}_centroid_x_m": centroid_x_m,
+        f"{prefix}_centroid_y_m": centroid_y_m,
+        f"{prefix}_bbox_width_km": width_m / 1000.0,
+        f"{prefix}_bbox_height_km": height_m / 1000.0,
+        f"{prefix}_compactness_4pi_area_perimeter2": compactness,
+        f"{prefix}_geometry_is_valid": valid,
+    }
 
 
 def angular_treatment_metrics(

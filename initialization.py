@@ -11,6 +11,7 @@ import tasks
 
 TASK_REGISTRY: dict[str, Callable] = {
     "build_wui_singlepart_dataset": tasks.build_wui_singlepart_dataset,
+    "build_fire_wui_geometry_characteristics": tasks.build_fire_wui_geometry_characteristics,
     "build_fire_wui_centroid_paths": tasks.build_fire_wui_centroid_paths,
     "build_fire_wui_centroid_path_distance_samples": tasks.build_fire_wui_centroid_path_distance_samples,
     "build_wui_annual_mtbs_outcomes": tasks.build_wui_annual_mtbs_outcomes,
@@ -256,6 +257,12 @@ def initialize_paths(project: LocalProjectFlow, config: dict[str, object] | None
         "wui_by_year_2010": wui_paths[2010],
         "wui_by_year_2020": wui_paths[2020],
         "wui_singlepart_dataset": wui_singlepart_dataset,
+        "fire_wui_geometry_characteristics_dataset": (
+            project_root / "data" / "processed" / "fire_wui_geometry_characteristics"
+        ),
+        "fire_wui_geometry_characteristics_summary": (
+            output_dir / "tables" / "fire_wui_geometry_characteristics_summary.csv"
+        ),
         "fire_wui_path_dataset": path_root / "data" / "processed" / "fire_wui_centroid_paths",
         "fire_wui_path_summary": path_root / "project" / "output" / "tables" / "fire_wui_centroid_paths_summary.csv",
         "fire_wui_paths_10mi": path_root / "data" / "processed" / "fire_wui_centroid_paths" / "distance_10mi",
