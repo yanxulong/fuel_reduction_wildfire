@@ -1228,7 +1228,7 @@ def build_fire_wui_treatment_definitions(project):
     import os
     import shutil
     import tempfile
-    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     from pathlib import Path
 
     import geopandas as gpd
@@ -1245,7 +1245,11 @@ def build_fire_wui_treatment_definitions(project):
         raise FileNotFoundError(
             f"Missing eligible FACTS treatment layer: {treatment_path}. Run prepare_facts_treatments first."
         )
-    path_root = project.paths["fire_wui_paths_10mi"]
+    path_distance_miles = float(project.config.get("fire_wui_distance_miles", 3.0))
+    if not math.isfinite(path_distance_miles) or path_distance_miles <= 0:
+        raise ValueError(f"fire_wui_distance_miles must be positive and finite; got {path_distance_miles}")
+    path_distance_label = f"{path_distance_miles:g}mi"
+    path_root = project.paths["fire_wui_path_dataset"] / f"distance_{path_distance_label}"
     singlepart_root = project.paths["wui_singlepart_dataset"]
     output_dir = project.paths["fire_wui_treatment_dataset"]
     summary_path = project.paths["fire_wui_treatment_summary"]
@@ -1255,7 +1259,10 @@ def build_fire_wui_treatment_definitions(project):
         functions.skip_task("build_fire_wui_treatment_definitions", output_dir, summary_path, catalog_path)
         return {"status": "skipped", "dataset": output_dir, "summary": summary_path}
     if not path_root.is_dir() or not singlepart_root.is_dir():
-        raise FileNotFoundError(f"Missing 10-mile fire-WUI paths or WUI single-part inputs: {path_root}; {singlepart_root}")
+        raise FileNotFoundError(
+            f"Missing {path_distance_label} fire-WUI paths or WUI single-part inputs: "
+            f"{path_root}; {singlepart_root}"
+        )
 
     windows = functions.build_treatment_time_windows(
         rolling_years=project.config.get("treatment_rolling_years", range(1, 11)),
@@ -1280,6 +1287,7 @@ def build_fire_wui_treatment_definitions(project):
 
     compute = functions.inspect_compute_capacity(memory_per_worker_gib=4.0, max_workers=8)
     workers = int(compute["workers"])
+    print(f"[input] Fire-WUI paths: {path_root}; max distance={path_distance_miles:g} miles", flush=True)
     print(f"[input] Eligible FACTS: {treatment_path}", flush=True)
     treatments = gpd.read_parquet(treatment_path)
     if treatments.crs is None:
@@ -1356,7 +1364,7 @@ def build_fire_wui_treatment_definitions(project):
     thresholds_pct = [(int(round(value * 100)), value) for value in thresholds]
 
     def process_pair(pair_row, wui_by_id):
-        pair = pair_row.to_dict()
+        pair = pair_row.to_dict() if hasattr(pair_row, "to_dict") else dict(pair_row)
         path_geometry = pair.pop("geometry", None)
         wui_id = functions.normalize_identifier(pair.get("wui_single_part_id"))
         wui = wui_by_id.get(wui_id)
@@ -1400,6 +1408,7 @@ def build_fire_wui_treatment_definitions(project):
         base = {
             **pair,
             "path_id": pair.get("path_id"),
+            "path_search_distance_miles": path_distance_miles,
             "fire_event_id_normalized": fire_id,
             "fire_anchor_type": "mtbs_centroid",
             "fire_direction_degrees": angle_degrees,
@@ -1586,6 +1595,7 @@ def build_fire_wui_treatment_definitions(project):
                 if not path_part_files:
                     summary_rows.append({
                         "wui_vintage_year": vintage,
+                        "path_search_distance_miles": path_distance_miles,
                         "wui_input": str(wui_path),
                         "path_input": str(path_path),
                         "fire_wui_pairs": 0,
@@ -1598,32 +1608,47 @@ def build_fire_wui_treatment_definitions(project):
                     progress.update(1)
                     continue
                 path_dataset = ds.dataset([str(path) for path in path_part_files], format="parquet")
-                with ThreadPoolExecutor(max_workers=workers) as executor:
-                    for batch in path_dataset.to_batches(batch_size=pair_batch_size):
-                        pair_frame = batch.to_pandas()
-                        if "geometry" in pair_frame.columns:
-                            pair_frame["geometry"] = shapely.from_wkb(pair_frame["geometry"].to_numpy())
-                        else:
-                            raise ValueError(f"Path shard lacks geometry column: {path_path}")
-                        pair_results = list(executor.map(
-                            lambda row: process_pair(row, wui_by_id),
-                            (row for _, row in pair_frame.iterrows()),
-                        ))
-                        rows = []
-                        for pair_rows, status in pair_results:
-                            shard_pair_count += 1
-                            shard_perimeter_matches += int(status["perimeter_matched"])
-                            rows.extend(pair_rows)
-                        if rows:
-                            output_path = shard_out_dir / f"part-{chunk_number:06d}.parquet"
-                            pd.DataFrame(rows).to_parquet(output_path, index=False, compression="zstd")
-                            chunk_number += 1
-                            shard_rows += len(rows)
-                        total_pairs += len(pair_results)
-                        total_exposure_rows += len(rows)
+                pair_progress = tqdm(
+                    desc=f"Treatment pairs {vintage} {wui_path.stem}",
+                    unit="pair",
+                    dynamic_ncols=True,
+                    leave=False,
+                )
+                try:
+                    with ThreadPoolExecutor(max_workers=workers) as executor:
+                        for batch in path_dataset.to_batches(batch_size=pair_batch_size):
+                            pair_frame = batch.to_pandas()
+                            if "geometry" in pair_frame.columns:
+                                pair_frame["geometry"] = shapely.from_wkb(pair_frame["geometry"].to_numpy())
+                            else:
+                                raise ValueError(f"Path shard lacks geometry column: {path_path}")
+                            futures = {
+                                executor.submit(process_pair, row, wui_by_id): index
+                                for index, row in enumerate(pair_frame.to_dict(orient="records"))
+                            }
+                            ordered_results = [None] * len(futures)
+                            for future in as_completed(futures):
+                                ordered_results[futures[future]] = future.result()
+                                pair_progress.update(1)
+                            pair_results = ordered_results
+                            rows = []
+                            for pair_rows, status in pair_results:
+                                shard_pair_count += 1
+                                shard_perimeter_matches += int(status["perimeter_matched"])
+                                rows.extend(pair_rows)
+                            if rows:
+                                output_path = shard_out_dir / f"part-{chunk_number:06d}.parquet"
+                                pd.DataFrame(rows).to_parquet(output_path, index=False, compression="zstd")
+                                chunk_number += 1
+                                shard_rows += len(rows)
+                            total_pairs += len(pair_results)
+                            total_exposure_rows += len(rows)
+                finally:
+                    pair_progress.close()
                 perimeter_matched += shard_perimeter_matches
                 summary_rows.append({
                     "wui_vintage_year": vintage,
+                    "path_search_distance_miles": path_distance_miles,
                     "wui_input": str(wui_path),
                     "path_input": str(path_path),
                     "fire_wui_pairs": shard_pair_count,
@@ -1657,6 +1682,7 @@ def build_fire_wui_treatment_definitions(project):
             catalog_rows.append({
                 "time_window": window["name"],
                 "time_window_kind": window["kind"],
+                "path_search_distance_miles": path_distance_miles,
                 "spatial_definition": "nearest_path_intersection",
                 "angular_threshold": "",
                 "time_lower_bound": lower_rule,
@@ -1674,6 +1700,7 @@ def build_fire_wui_treatment_definitions(project):
                 catalog_rows.append({
                     "time_window": window["name"],
                     "time_window_kind": window["kind"],
+                    "path_search_distance_miles": path_distance_miles,
                     "spatial_definition": "angular_coverage_threshold",
                     "angular_threshold": threshold,
                     "time_lower_bound": lower_rule,
@@ -1690,12 +1717,12 @@ def build_fire_wui_treatment_definitions(project):
         functions.write_csv(
             summary_rows,
             temporary_summary,
-            fieldnames=("wui_vintage_year", "wui_input", "path_input", "fire_wui_pairs", "treatment_window_rows", "perimeter_matched_pairs", "perimeter_match_share", "output_dir"),
+            fieldnames=("wui_vintage_year", "path_search_distance_miles", "wui_input", "path_input", "fire_wui_pairs", "treatment_window_rows", "perimeter_matched_pairs", "perimeter_match_share", "output_dir"),
         )
         functions.write_csv(
             catalog_rows,
             temporary_catalog,
-            fieldnames=("time_window", "time_window_kind", "spatial_definition", "angular_threshold", "time_lower_bound", "time_upper_bound", "completion_date_precision_rule", "treatment_spatial_scope", "treatment_wui_buffer_miles", "fire_perimeter_threat_buffer_miles", "comparison_rule", "angular_treatment_rule", "thickness_rule", "fire_perimeter_control_rule"),
+            fieldnames=("time_window", "time_window_kind", "path_search_distance_miles", "spatial_definition", "angular_threshold", "time_lower_bound", "time_upper_bound", "completion_date_precision_rule", "treatment_spatial_scope", "treatment_wui_buffer_miles", "fire_perimeter_threat_buffer_miles", "comparison_rule", "angular_treatment_rule", "thickness_rule", "fire_perimeter_control_rule"),
         )
         if output_dir.exists():
             shutil.rmtree(output_dir)
