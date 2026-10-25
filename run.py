@@ -31,6 +31,9 @@ CONFIG = {
     "fire_perimeter_threat_buffer_miles": 1.5,
     "treatment_thickness_step_degrees": 0.25,
     "treatment_pair_batch_size": 256,
+    "treatment_array_worker_id": None,
+    "treatment_array_worker_count": None,
+    "treatment_array_run_id": None,
 }
 
 
@@ -54,6 +57,10 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Fire-centroid to WUI single-part edge search distance (miles; default: 3).",
     )
+    parser.add_argument("--array-worker-id", type=int, default=None, help="Array worker index for treatment shard mode.")
+    parser.add_argument("--array-worker-count", type=int, default=None, help="Total treatment array worker count.")
+    parser.add_argument("--array-run-id", default=None, help="Unique run ID shared by treatment array workers and finalizer.")
+    parser.add_argument("--overwrite-existing", action="store_true", help="Replace complete outputs during finalization.")
     return parser.parse_args()
 
 
@@ -66,8 +73,25 @@ def main() -> int:
 
     config = dict(CONFIG)
     config["enabled_tasks"] = args.task or list(CONFIG["enabled_tasks"])
+    config["treatment_array_worker_id"] = args.array_worker_id
+    config["treatment_array_worker_count"] = args.array_worker_count
+    config["treatment_array_run_id"] = args.array_run_id
+    if args.overwrite_existing:
+        config["overwrite_existing"] = True
     if args.distance_miles is not None:
         config["fire_wui_distance_miles"] = args.distance_miles
+    array_options_given = any((args.array_worker_id is not None, args.array_worker_count is not None, args.array_run_id))
+    if array_options_given and not args.array_run_id:
+        raise SystemExit("--array-run-id is required with treatment array options.")
+    if args.array_worker_id is not None:
+        if args.array_worker_count is None or args.array_worker_count < 1:
+            raise SystemExit("--array-worker-count must be positive when --array-worker-id is supplied.")
+        if config["enabled_tasks"] != ["build_fire_wui_treatment_definitions"]:
+            raise SystemExit("Array worker mode requires only --task build_fire_wui_treatment_definitions.")
+    elif array_options_given and config["enabled_tasks"] != ["finalize_fire_wui_treatment_definitions"]:
+        raise SystemExit("Array metadata without a worker ID is reserved for the treatment finalizer task.")
+    if "finalize_fire_wui_treatment_definitions" in config["enabled_tasks"] and args.array_worker_count is None:
+        raise SystemExit("Finalizer requires --array-worker-count and --array-run-id.")
     if config.get("overwrite_existing", False):
         print("[policy] overwrite enabled; existing task outputs may be rebuilt.")
     else:

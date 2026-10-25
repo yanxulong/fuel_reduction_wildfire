@@ -7,6 +7,7 @@ Contents:
 - build_wui_annual_mtbs_outcomes: calculate annual burn, area, and severity for WUI single parts
 - prepare_facts_treatments: retain completed FACTS prevention polygons and treatment-date provenance
 - build_fire_wui_treatment_definitions: create treatment windows, path/angular exposure, thickness, and fire-perimeter controls
+- finalize_fire_wui_treatment_definitions: validate treatment array manifests and atomically assemble worker outputs
 - landfire_controls: summarize LF2020 terrain rasters for WUI single parts, MTBS fire points, and MTBS fire areas
 """
 
@@ -1226,6 +1227,7 @@ def build_fire_wui_treatment_definitions(project):
     import math
     import json
     import os
+    import re
     import shutil
     import tempfile
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -1255,7 +1257,53 @@ def build_fire_wui_treatment_definitions(project):
     summary_path = project.paths["fire_wui_treatment_summary"]
     catalog_path = project.paths["treatment_definition_catalog"]
     overwrite = bool(project.config.get("overwrite_existing", False))
-    if functions.should_skip(overwrite, [output_dir, summary_path, catalog_path]):
+    raw_worker_id = project.config.get("treatment_array_worker_id")
+    raw_worker_count = project.config.get("treatment_array_worker_count")
+    array_run_id = project.config.get("treatment_array_run_id")
+    array_mode = raw_worker_id is not None or raw_worker_count is not None
+    worker_id = None
+    worker_count = None
+    worker_run_root = None
+    worker_output_dir = None
+    if array_mode:
+        if raw_worker_id is None or raw_worker_count is None or not array_run_id:
+            raise ValueError("Array mode requires worker ID, worker count, and run ID")
+        worker_id = int(raw_worker_id)
+        worker_count = int(raw_worker_count)
+        array_run_id = str(array_run_id)
+        if worker_count < 1 or not 0 <= worker_id < worker_count:
+            raise ValueError(f"Invalid array worker {worker_id}/{worker_count}")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", array_run_id):
+            raise ValueError(f"Unsafe treatment array run ID: {array_run_id!r}")
+        worker_run_root = project.paths["fire_wui_treatment_runs"] / array_run_id
+        worker_output_dir = worker_run_root / f"worker_{worker_id:03d}"
+        if worker_output_dir.exists():
+            manifest_path = worker_output_dir / "manifest.json"
+            if manifest_path.is_file():
+                with manifest_path.open(encoding="utf-8") as stream:
+                    completed_manifest = json.load(stream)
+                if (
+                    completed_manifest.get("status") == "complete"
+                    and completed_manifest.get("run_id") == array_run_id
+                    and int(completed_manifest.get("worker_id", -1)) == worker_id
+                    and int(completed_manifest.get("worker_count", -1)) == worker_count
+                    and math.isclose(
+                        float(completed_manifest.get("path_search_distance_miles", -1)),
+                        path_distance_miles,
+                    )
+                ):
+                    print(f"[skip] completed array worker already present: {worker_output_dir}", flush=True)
+                    return {
+                        "status": "worker_skipped",
+                        "worker_id": worker_id,
+                        "worker_count": worker_count,
+                        "run_id": array_run_id,
+                        "manifest": manifest_path,
+                    }
+            raise FileExistsError(
+                f"Unverified worker output already exists: {worker_output_dir}; use a fresh --array-run-id."
+            )
+    elif functions.should_skip(overwrite, [output_dir, summary_path, catalog_path]):
         functions.skip_task("build_fire_wui_treatment_definitions", output_dir, summary_path, catalog_path)
         return {"status": "skipped", "dataset": output_dir, "summary": summary_path}
     if not path_root.is_dir() or not singlepart_root.is_dir():
@@ -1354,11 +1402,40 @@ def build_fire_wui_treatment_definitions(project):
             f"No matching {path_distance_miles:g}-mile path/WUI shard pairs found under {path_root}"
         )
 
+    all_source_files = source_files
+    all_source_shards = [f"{vintage}/{wui_path.stem}" for vintage, wui_path, _ in all_source_files]
+    if array_mode:
+        source_files = [
+            source for index, source in enumerate(all_source_files)
+            if index % worker_count == worker_id
+        ]
+        if not source_files:
+            raise ValueError(f"Array worker {worker_id} received no WUI shards")
+    assigned_source_shards = [f"{vintage}/{wui_path.stem}" for vintage, wui_path, _ in source_files]
+    if array_mode:
+        print(
+            f"[array] run={array_run_id}; worker={worker_id + 1}/{worker_count}; "
+            f"shards={len(source_files)}/{len(all_source_files)}; output={worker_output_dir}",
+            flush=True,
+        )
+
     functions.ensure_dir(output_dir.parent)
     functions.ensure_dir(summary_path.parent)
-    temporary_dir = Path(tempfile.mkdtemp(prefix=".fire_wui_treatment.", dir=output_dir.parent))
-    temporary_summary = summary_path.with_name(f".{summary_path.name}.{os.getpid()}.tmp")
-    temporary_catalog = catalog_path.with_name(f".{catalog_path.name}.{os.getpid()}.tmp")
+    if array_mode:
+        functions.ensure_dir(worker_run_root)
+        temporary_stage_root = Path(tempfile.mkdtemp(
+            prefix=f".worker_{worker_id:03d}.", dir=worker_run_root
+        ))
+        temporary_dir = temporary_stage_root / "dataset"
+        functions.ensure_dir(temporary_dir)
+        temporary_summary = temporary_stage_root / "summary.csv"
+        temporary_catalog = temporary_stage_root / "catalog.csv"
+        temporary_manifest = temporary_stage_root / "manifest.json"
+    else:
+        temporary_stage_root = None
+        temporary_dir = Path(tempfile.mkdtemp(prefix=".fire_wui_treatment.", dir=output_dir.parent))
+        temporary_summary = summary_path.with_name(f".{summary_path.name}.{os.getpid()}.tmp")
+        temporary_catalog = catalog_path.with_name(f".{catalog_path.name}.{os.getpid()}.tmp")
     summary_rows = []
     total_pairs = 0
     total_exposure_rows = 0
@@ -1640,7 +1717,7 @@ def build_fire_wui_treatment_definitions(project):
                         "treatment_window_rows": 0,
                         "perimeter_matched_pairs": 0,
                         "perimeter_match_share": np.nan,
-                        "output_dir": str(shard_out_dir),
+                        "output_dir": str(output_dir / f"wui_vintage_{vintage}" / wui_path.stem),
                     })
                     tqdm.write(f"[progress] WUI {vintage} {wui_path.name}: no fire-WUI path pairs")
                     progress.update(1)
@@ -1693,7 +1770,7 @@ def build_fire_wui_treatment_definitions(project):
                     "treatment_window_rows": shard_rows,
                     "perimeter_matched_pairs": shard_perimeter_matches,
                     "perimeter_match_share": shard_perimeter_matches / shard_pair_count if shard_pair_count else np.nan,
-                    "output_dir": str(shard_out_dir),
+                    "output_dir": str(output_dir / f"wui_vintage_{vintage}" / wui_path.stem),
                 })
                 tqdm.write(
                     f"[progress] WUI {vintage} {wui_path.name}: pairs={shard_pair_count:,}; "
@@ -1762,13 +1839,51 @@ def build_fire_wui_treatment_definitions(project):
             temporary_catalog,
             fieldnames=("time_window", "time_window_kind", "path_search_distance_miles", "spatial_definition", "angular_threshold", "time_lower_bound", "time_upper_bound", "completion_date_precision_rule", "treatment_spatial_scope", "treatment_wui_buffer_miles", "fire_perimeter_threat_buffer_miles", "comparison_rule", "angular_treatment_rule", "thickness_rule", "fire_perimeter_control_rule"),
         )
+        if array_mode:
+            manifest = {
+                "status": "complete",
+                "run_id": array_run_id,
+                "worker_id": worker_id,
+                "worker_count": worker_count,
+                "path_search_distance_miles": path_distance_miles,
+                "expected_shard_count": len(all_source_shards),
+                "expected_source_shards": all_source_shards,
+                "assigned_source_shards": assigned_source_shards,
+                "fire_wui_pairs": total_pairs,
+                "treatment_window_rows": total_exposure_rows,
+                "perimeter_matched_pairs": perimeter_matched,
+                "dataset_file_count": sum(
+                    1 for path in temporary_dir.rglob("*.parquet") if path.is_file()
+                ),
+                "summary_file": "summary.csv",
+                "catalog_file": "catalog.csv",
+                "dataset_dir": "dataset",
+            }
+            with temporary_manifest.open("w", encoding="utf-8") as stream:
+                json.dump(manifest, stream, indent=2)
+                stream.write("\n")
+            temporary_stage_root.replace(worker_output_dir)
+            print(f"[output] worker dataset: {worker_output_dir / 'dataset'}", flush=True)
+            print(f"[output] worker manifest: {worker_output_dir / 'manifest.json'}", flush=True)
+            return {
+                "status": "worker_complete",
+                "worker_id": worker_id,
+                "worker_count": worker_count,
+                "run_id": array_run_id,
+                "manifest": worker_output_dir / "manifest.json",
+                "pairs": total_pairs,
+                "exposure_rows": total_exposure_rows,
+            }
         if output_dir.exists():
             shutil.rmtree(output_dir)
         temporary_dir.replace(output_dir)
         temporary_summary.replace(summary_path)
         temporary_catalog.replace(catalog_path)
     except BaseException:
-        shutil.rmtree(temporary_dir, ignore_errors=True)
+        if temporary_stage_root is not None:
+            shutil.rmtree(temporary_stage_root, ignore_errors=True)
+        else:
+            shutil.rmtree(temporary_dir, ignore_errors=True)
         temporary_summary.unlink(missing_ok=True)
         temporary_catalog.unlink(missing_ok=True)
         raise
@@ -1787,6 +1902,196 @@ def build_fire_wui_treatment_definitions(project):
         "pairs": total_pairs,
         "exposure_rows": total_exposure_rows,
         "perimeter_matches": perimeter_matched,
+    }
+
+
+def finalize_fire_wui_treatment_definitions(project):
+    """Contents: verify every array manifest; assemble unique shard outputs and publish final tables."""
+    functions.configure_geospatial_environment()
+
+    import hashlib
+    import json
+    import os
+    import re
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    import pandas as pd
+    from tqdm import tqdm
+
+    run_id = project.config.get("treatment_array_run_id")
+    worker_count = project.config.get("treatment_array_worker_count")
+    if not run_id or worker_count is None:
+        raise ValueError("Finalizer requires --array-run-id and --array-worker-count")
+    run_id = str(run_id)
+    worker_count = int(worker_count)
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", run_id):
+        raise ValueError(f"Unsafe treatment array run ID: {run_id!r}")
+    if worker_count < 1:
+        raise ValueError(f"Array worker count must be positive; got {worker_count}")
+    functions.inspect_compute_capacity(memory_per_worker_gib=2.0, max_workers=1)
+
+    output_dir = project.paths["fire_wui_treatment_dataset"]
+    summary_path = project.paths["fire_wui_treatment_summary"]
+    catalog_path = project.paths["treatment_definition_catalog"]
+    overwrite = bool(project.config.get("overwrite_existing", False))
+    if functions.should_skip(overwrite, [output_dir, summary_path, catalog_path]):
+        functions.skip_task("finalize_fire_wui_treatment_definitions", output_dir, summary_path, catalog_path)
+        return {"status": "skipped", "dataset": output_dir, "summary": summary_path}
+
+    run_root = project.paths["fire_wui_treatment_runs"] / run_id
+    worker_dirs = [run_root / f"worker_{worker_id:03d}" for worker_id in range(worker_count)]
+    manifests = []
+    for worker_id, worker_dir in enumerate(worker_dirs):
+        manifest_path = worker_dir / "manifest.json"
+        if not manifest_path.is_file() or manifest_path.stat().st_size == 0:
+            raise FileNotFoundError(f"Missing successful worker manifest: {manifest_path}")
+        with manifest_path.open(encoding="utf-8") as stream:
+            manifest = json.load(stream)
+        if (
+            manifest.get("status") != "complete"
+            or manifest.get("run_id") != run_id
+            or int(manifest.get("worker_id", -1)) != worker_id
+            or int(manifest.get("worker_count", -1)) != worker_count
+        ):
+            raise ValueError(f"Worker manifest identity/status mismatch: {manifest_path}")
+        manifests.append(manifest)
+
+    expected_shards = manifests[0].get("expected_source_shards")
+    if not isinstance(expected_shards, list) or not expected_shards:
+        raise ValueError(f"Worker manifest has no expected source roster: {worker_dirs[0] / 'manifest.json'}")
+    if len(expected_shards) != int(manifests[0].get("expected_shard_count", -1)):
+        raise ValueError("Expected WUI shard roster count does not match manifest count")
+    assigned_shards = []
+    summary_rows = []
+    catalog_rows = None
+    catalog_digest = None
+    total_pairs = 0
+    total_rows = 0
+    perimeter_matches = 0
+    worker_datasets = []
+    for worker_id, (worker_dir, manifest) in enumerate(zip(worker_dirs, manifests)):
+        if manifest.get("expected_source_shards") != expected_shards:
+            raise ValueError(f"Workers disagree on expected WUI shard roster: {worker_dir}")
+        if int(manifest.get("expected_shard_count", -1)) != len(expected_shards):
+            raise ValueError(f"Worker expected-shard count mismatch: {worker_dir}")
+        expected_for_worker = [
+            shard for index, shard in enumerate(expected_shards)
+            if index % worker_count == worker_id
+        ]
+        assigned = manifest.get("assigned_source_shards")
+        if assigned != expected_for_worker:
+            raise ValueError(f"Worker shard assignment is incomplete or inconsistent: {worker_dir}")
+        assigned_shards.extend(assigned)
+        dataset_dir = worker_dir / str(manifest.get("dataset_dir", "dataset"))
+        if not dataset_dir.is_dir():
+            raise FileNotFoundError(f"Worker dataset directory missing: {dataset_dir}")
+        worker_parquets = [path for path in dataset_dir.rglob("*.parquet") if path.is_file()]
+        if len(worker_parquets) != int(manifest.get("dataset_file_count", -1)):
+            raise ValueError(f"Worker Parquet file count mismatch: {dataset_dir}")
+        for shard_key in assigned:
+            vintage, shard_name = shard_key.split("/", 1)
+            expected_dir = dataset_dir / f"wui_vintage_{vintage}" / shard_name
+            if not expected_dir.is_dir():
+                raise FileNotFoundError(f"Worker output shard missing: {expected_dir}")
+        worker_datasets.append(dataset_dir)
+
+        worker_summary = worker_dir / str(manifest.get("summary_file", "summary.csv"))
+        worker_catalog = worker_dir / str(manifest.get("catalog_file", "catalog.csv"))
+        if not worker_summary.is_file() or not worker_catalog.is_file():
+            raise FileNotFoundError(f"Worker summary/catalog missing: {worker_dir}")
+        local_summary_rows = pd.read_csv(worker_summary).to_dict(orient="records")
+        if len(local_summary_rows) != len(assigned):
+            raise ValueError(f"Worker summary row count mismatch: {worker_summary}")
+        summary_rows.extend(local_summary_rows)
+        local_catalog_rows = pd.read_csv(worker_catalog).to_dict(orient="records")
+        local_digest = hashlib.sha256(worker_catalog.read_bytes()).hexdigest()
+        if catalog_digest is None:
+            catalog_digest = local_digest
+            catalog_rows = local_catalog_rows
+        elif local_digest != catalog_digest:
+            raise ValueError(f"Workers produced different treatment catalogs: {worker_catalog}")
+        total_pairs += int(manifest.get("fire_wui_pairs", 0))
+        total_rows += int(manifest.get("treatment_window_rows", 0))
+        perimeter_matches += int(manifest.get("perimeter_matched_pairs", 0))
+
+    if len(assigned_shards) != len(set(assigned_shards)) or set(assigned_shards) != set(expected_shards):
+        raise ValueError("Worker manifests do not cover each expected WUI shard exactly once")
+    summary_pairs = sum(int(row["fire_wui_pairs"]) for row in summary_rows)
+    summary_exposures = sum(int(row["treatment_window_rows"]) for row in summary_rows)
+    summary_matches = sum(int(row["perimeter_matched_pairs"]) for row in summary_rows)
+    if (summary_pairs, summary_exposures, summary_matches) != (total_pairs, total_rows, perimeter_matches):
+        raise ValueError("Worker summary totals do not match manifest totals")
+    summary_rows.sort(key=lambda row: (int(row["wui_vintage_year"]), str(row["wui_input"])))
+
+    functions.ensure_dir(output_dir.parent)
+    functions.ensure_dir(summary_path.parent)
+    temporary_root = Path(tempfile.mkdtemp(prefix=".fire_wui_treatment_finalize.", dir=output_dir.parent))
+    temporary_dir = temporary_root / "dataset"
+    temporary_dir.mkdir()
+    temporary_summary = temporary_root / "summary.csv"
+    temporary_catalog = temporary_root / "catalog.csv"
+    try:
+        shard_files = [
+            (path, dataset_dir)
+            for dataset_dir in worker_datasets
+            for path in dataset_dir.rglob("*")
+            if path.is_file()
+        ]
+        seen_relpaths = set()
+        with tqdm(total=len(shard_files), desc="Assemble treatment shards", unit="file", dynamic_ncols=True) as progress:
+            for source, dataset_dir in shard_files:
+                relative = source.relative_to(dataset_dir)
+                if relative in seen_relpaths:
+                    raise ValueError(f"Duplicate worker output path: {relative}")
+                seen_relpaths.add(relative)
+                destination = temporary_dir / relative
+                functions.ensure_dir(destination.parent)
+                try:
+                    os.link(source, destination)
+                except OSError:
+                    shutil.copy2(source, destination)
+                progress.update(1)
+
+        functions.write_csv(
+            summary_rows,
+            temporary_summary,
+            fieldnames=("wui_vintage_year", "path_search_distance_miles", "wui_input", "path_input", "fire_wui_pairs", "treatment_window_rows", "perimeter_matched_pairs", "perimeter_match_share", "output_dir"),
+        )
+        functions.write_csv(
+            catalog_rows or [],
+            temporary_catalog,
+            fieldnames=("time_window", "time_window_kind", "path_search_distance_miles", "spatial_definition", "angular_threshold", "time_lower_bound", "time_upper_bound", "completion_date_precision_rule", "treatment_spatial_scope", "treatment_wui_buffer_miles", "fire_perimeter_threat_buffer_miles", "comparison_rule", "angular_treatment_rule", "thickness_rule", "fire_perimeter_control_rule"),
+        )
+        if output_dir.exists():
+            shutil.rmtree(output_dir)
+        temporary_dir.replace(output_dir)
+        temporary_summary.replace(summary_path)
+        temporary_catalog.replace(catalog_path)
+    except BaseException:
+        shutil.rmtree(temporary_root, ignore_errors=True)
+        raise
+    shutil.rmtree(temporary_root, ignore_errors=True)
+
+    print(f"[output] Fire-WUI treatment definitions: {output_dir}")
+    print(f"[output] Treatment definition catalog: {catalog_path}")
+    print(f"[provenance] Worker manifests retained: {run_root}")
+    print(
+        f"[result] pairs={total_pairs:,}; exposure rows={total_rows:,}; "
+        f"perimeter matches={perimeter_matches:,}/{total_pairs:,}; "
+        f"workers={worker_count}; shards={len(expected_shards)}"
+    )
+    return {
+        "status": "finalized",
+        "dataset": output_dir,
+        "summary": summary_path,
+        "catalog": catalog_path,
+        "run_manifest_root": run_root,
+        "workers": worker_count,
+        "shards": len(expected_shards),
+        "pairs": total_pairs,
+        "exposure_rows": total_rows,
     }
 
 

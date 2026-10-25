@@ -17,6 +17,7 @@ TASK_REGISTRY: dict[str, Callable] = {
     "landfire_controls": tasks.landfire_controls,
     "prepare_facts_treatments": tasks.prepare_facts_treatments,
     "build_fire_wui_treatment_definitions": tasks.build_fire_wui_treatment_definitions,
+    "finalize_fire_wui_treatment_definitions": tasks.finalize_fire_wui_treatment_definitions,
 }
 
 
@@ -273,6 +274,7 @@ def initialize_paths(project: LocalProjectFlow, config: dict[str, object] | None
         "fire_wui_treatment_dataset": treatment_dataset,
         "fire_wui_treatment_summary": treatment_summary_paths[0],
         "treatment_definition_catalog": treatment_summary_paths[1],
+        "fire_wui_treatment_runs": treatment_dataset.parent / ".fire_wui_treatment_runs",
         "mtbs_severity_raster_roots": mtbs_raster_roots,
         "mtbs_severity_raster_root": mtbs_raster_roots[0],
         "wui_annual_mtbs_outcomes": outcomes_dataset,
