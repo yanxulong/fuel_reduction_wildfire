@@ -14,6 +14,7 @@ TASK_REGISTRY: dict[str, Callable] = {
     "build_fire_wui_geometry_characteristics": tasks.build_fire_wui_geometry_characteristics,
     "build_fire_wui_centroid_paths": tasks.build_fire_wui_centroid_paths,
     "build_fire_wui_centroid_path_distance_samples": tasks.build_fire_wui_centroid_path_distance_samples,
+    "fire_filteration": tasks.fire_filteration,
     "build_wui_annual_mtbs_outcomes": tasks.build_wui_annual_mtbs_outcomes,
     "landfire_controls": tasks.landfire_controls,
     "prepare_facts_treatments": tasks.prepare_facts_treatments,

@@ -5,9 +5,10 @@ Contents:
 - build_fire_wui_geometry_characteristics: create stand-alone MTBS point, fire-perimeter, and WUI polygon characteristic tables
 - build_fire_wui_centroid_paths: link MTBS fire centroids to WUI single-part edges within a configurable radius
 - build_fire_wui_centroid_path_distance_samples: build path datasets for 1 to 10 miles
+- fire_filteration: run fire-centroid-to-WUI-edge filtering at 1 to 10 miles in 0.5-mile steps
 - build_wui_annual_mtbs_outcomes: calculate annual burn, area, and severity for WUI single parts
 - prepare_facts_treatments: retain completed FACTS prevention polygons and treatment-date provenance
-- build_fire_wui_treatment_definitions_rolling5y_mixed_fires: build five-year path and angular treatment measures for mixed-exposure fires
+- build_fire_wui_treatment_definitions_rolling5y_mixed_fires: build five-year direct-path treatment, continuous angular coverage, and full-coverage thickness measures
 - finalize_fire_wui_treatment_definitions: validate workers, retain mixed treated/control fires, and publish path sample
 - landfire_controls: summarize LF2020 terrain rasters for WUI single parts, MTBS fire points, and MTBS fire areas
 """
@@ -1018,6 +1019,11 @@ def build_fire_wui_centroid_path_distance_samples(project):
     }
 
 
+def fire_filteration(project):
+    """Build fire-WUI edge-distance samples from 1 to 10 miles by 0.5 miles."""
+    return build_fire_wui_centroid_path_distance_samples(project)
+
+
 def build_wui_annual_mtbs_outcomes(project):
     """Build annual WUI single-part outcomes from MTBS burn boundaries and severity mosaics."""
     functions.configure_geospatial_environment()
@@ -1614,7 +1620,7 @@ def prepare_facts_treatments(project):
 
 
 def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
-    """Contents: link fire perimeters; measure five-year path and angular treatment exposure."""
+    """Contents: link fire perimeters; measure five-year path, angular coverage, and full-coverage thickness."""
     functions.configure_geospatial_environment()
 
     import hashlib
@@ -1657,9 +1663,8 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
             "compute_angular_exposure": bool(
                 project.config.get("treatment_compute_angular_exposure", True)
             ),
-            "angular_thresholds": list(project.config.get(
-                "treatment_angular_thresholds", [pct / 100 for pct in range(5, 101, 5)]
-            )),
+            "compute_thickness_when_full": True,
+            "thickness_step_degrees": 0.25,
             "treatment_wui_buffer_miles": project.config.get("treatment_wui_buffer_miles", 1.5),
             "fire_perimeter_threat_buffer_miles": project.config.get(
                 "fire_perimeter_threat_buffer_miles", 1.5
@@ -1669,9 +1674,6 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
             ),
             "keep_only_classified_paths": bool(
                 project.config.get("treatment_keep_only_classified_paths", True)
-            ),
-            "thickness_step_degrees": float(
-                project.config.get("treatment_thickness_step_degrees", 0.25)
             ),
         },
         sort_keys=True,
@@ -1763,35 +1765,28 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
             f"got {[window['name'] for window in windows]}"
         )
     compute_angular = bool(project.config.get("treatment_compute_angular_exposure", True))
-    thresholds = tuple(sorted({float(value) for value in project.config.get(
-        "treatment_angular_thresholds", (pct / 100 for pct in range(5, 101, 5))
-    )})) if compute_angular else ()
-    if compute_angular and (not thresholds or any(value <= 0 or value > 1 for value in thresholds)):
-        raise ValueError(f"Angular coverage thresholds must be in (0, 1]; got {thresholds}")
-    if compute_angular and any(
-        not math.isclose(value * 100 / 5, round(value * 100 / 5), abs_tol=1e-9)
-        for value in thresholds
-    ):
-        raise ValueError(f"Angular thresholds must use 5-percentage-point steps; got {thresholds}")
-    if compute_angular and 1.0 not in thresholds:
-        thresholds = (*thresholds, 1.0)
     treatment_buffer_miles = project.config.get("treatment_wui_buffer_miles", 1.5)
     perimeter_buffer_miles = float(project.config.get("fire_perimeter_threat_buffer_miles", 1.5))
     pair_batch_size = max(1, int(project.config.get("treatment_pair_batch_size", 256)))
     if treatment_buffer_miles is not None and float(treatment_buffer_miles) <= 0:
         raise ValueError("treatment_wui_buffer_miles must be positive or None")
+    if treatment_buffer_miles is not None:
+        raise ValueError(
+            "The focused 5-year, 3-mile sample uses treatment polygons intersecting the direct fire-WUI path; "
+            "set treatment_wui_buffer_miles=None."
+        )
     if perimeter_buffer_miles < 0:
         raise ValueError("fire_perimeter_threat_buffer_miles cannot be negative")
 
     compute = functions.inspect_compute_capacity(memory_per_worker_gib=16.0, max_workers=24)
     workers = int(compute["workers"])
-    thickness_step_degrees = float(project.config.get("treatment_thickness_step_degrees", 0.25))
     print(f"[input] Fire-WUI paths: {path_root}; max distance={path_distance_miles:g} miles", flush=True)
     print(f"[input] Eligible FACTS: {treatment_path}", flush=True)
     print(
         "[sample] windows=" + ",".join(window["name"] for window in windows)
         + f"; path-only={not compute_angular}; mixed-fire filter="
-        + str(require_mixed_fire_paths),
+        + str(require_mixed_fire_paths)
+        + "; angular output=continuous percent; thickness when coverage is full",
         flush=True,
     )
     treatments = gpd.read_parquet(treatment_path)
@@ -1900,10 +1895,7 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
     total_pairs = 0
     total_exposure_rows = 0
     perimeter_matched = 0
-    treatment_buffer_m = None if treatment_buffer_miles is None else float(treatment_buffer_miles) * 1609.344
     perimeter_buffer_m = perimeter_buffer_miles * 1609.344
-    thresholds_pct = [(int(round(value * 100)), value) for value in thresholds]
-
     def process_pair(pair_row, wui_by_id):
         pair = pair_row.to_dict() if hasattr(pair_row, "to_dict") else dict(pair_row)
         path_geometry = pair.pop("geometry", None)
@@ -1941,12 +1933,7 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
         direction_bin_24 = int(math.floor(angle_degrees / 15.0)) % 24
         distance_m = float(pair.get("fire_to_wui_edge_distance_m", path_geometry.length))
         distance_bin_500m = int(math.floor(distance_m / 500.0))
-        if not compute_angular:
-            search_geometry = path_geometry
-        elif treatment_buffer_m is None:
-            search_geometry = shapely.convex_hull(shapely.union(origin, wui))
-        else:
-            search_geometry = wui.buffer(treatment_buffer_m)
+        search_geometry = path_geometry
         candidate_idx = np.asarray(treatment_tree.query(search_geometry, predicate="intersects"), dtype=np.int64)
         base = {
             **pair,
@@ -2040,15 +2027,15 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
                 path_summary_cache[key] = (intersects, length)
             return path_summary_cache[key]
 
-        def cached_angular(key, treatment_union, compute_thickness):
-            cache_key = (key, bool(compute_thickness))
+        def cached_angular(key, treatment_union):
+            cache_key = key
             if cache_key not in angular_cache:
                 angular_cache[cache_key] = functions.angular_treatment_metrics(
                     origin,
                     wui,
                     [treatment_union] if not shapely.is_empty(treatment_union) else [],
-                    thickness_step_degrees=thickness_step_degrees,
-                    compute_thickness_when_full=compute_thickness,
+                    thickness_step_degrees=0.25,
+                    compute_thickness_when_full=True,
                 )
             return angular_cache[cache_key]
 
@@ -2058,15 +2045,18 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
             known_local_idx = np.flatnonzero(np.equal(membership, True)).tolist()
             uncertain_local_idx = np.flatnonzero(np.equal(membership, None)).tolist()
             path_local_idx = [index for index in known_local_idx if candidate_path_hits[index]]
-            union_local_idx = known_local_idx if compute_angular else path_local_idx
+            union_local_idx = path_local_idx
             union_key, treatment_union = cached_union(union_local_idx)
             known_path_intersection, path_length = cached_path_summary(union_key, treatment_union)
             uncertain_path_hit = bool(candidate_path_hits[uncertain_local_idx].any())
             possible_coverage = None
             if compute_angular and uncertain_local_idx:
-                possible_local_idx = sorted((*known_local_idx, *uncertain_local_idx))
+                uncertain_path_idx = [
+                    index for index in uncertain_local_idx if candidate_path_hits[index]
+                ]
+                possible_local_idx = sorted((*path_local_idx, *uncertain_path_idx))
                 possible_key, possible_union = cached_union(possible_local_idx)
-                possible_angular = cached_angular(possible_key, possible_union, False)
+                possible_angular = cached_angular(possible_key, possible_union)
                 possible_coverage = possible_angular["angular_coverage_fraction"]
             if known_path_intersection:
                 nearest_status = "treated"
@@ -2075,7 +2065,7 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
             else:
                 nearest_status = "control"
             if compute_angular:
-                angular = cached_angular(union_key, treatment_union, True)
+                angular = cached_angular(union_key, treatment_union)
                 coverage = angular["angular_coverage_fraction"]
                 if not uncertain_local_idx:
                     possible_coverage = coverage
@@ -2124,7 +2114,15 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
                 "angular_total_degrees": angular["angular_total_degrees"],
                 "angular_covered_degrees": angular["angular_covered_degrees"],
                 "angular_coverage_fraction": coverage,
+                "angular_coverage_percent": (
+                    100.0 * coverage if coverage is not None and np.isfinite(coverage) else np.nan
+                ),
                 "angular_coverage_fraction_if_undated_candidates_eligible": possible_coverage,
+                "angular_coverage_percent_if_undated_candidates_eligible": (
+                    100.0 * possible_coverage
+                    if possible_coverage is not None and np.isfinite(possible_coverage)
+                    else np.nan
+                ),
                 "thickness_mean_m": angular["thickness_mean_m"],
                 "thickness_p10_m": angular["thickness_p10_m"],
                 "thickness_min_m": angular["thickness_min_m"],
@@ -2133,25 +2131,6 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
                 "angular_geometry_status": angular["angular_geometry_status"],
                 "crs_epsg": 5070,
             }
-            for pct, threshold in thresholds_pct:
-                if coverage is None:
-                    status = "unknown"
-                elif coverage >= threshold - 1e-10:
-                    status = "treated"
-                elif possible_coverage is not None and possible_coverage >= threshold - 1e-10:
-                    status = "unknown"
-                elif coverage <= 1e-10:
-                    status = "control"
-                else:
-                    status = "positive_below_threshold"
-                result[f"angular_ge_{pct:03d}_status"] = status
-                result[f"angular_ge_{pct:03d}_treated"] = (
-                    1 if status == "treated" else (0 if status == "control" else None)
-                )
-                result[f"angular_ge_{pct:03d}_control"] = (
-                    1 if status == "control" else (0 if status == "treated" else None)
-                )
-                result[f"angular_ge_{pct:03d}_eligible"] = int(status in {"treated", "control"})
             result["nearest_path_treated"] = (
                 1 if nearest_status == "treated" else (0 if nearest_status == "control" else None)
             )
@@ -2257,15 +2236,7 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
                 progress.update(1)
 
         catalog_rows = []
-        treatment_scope = (
-            "centroid_to_wui_edge_path_intersection"
-            if not compute_angular
-            else (
-                "fire_wui_convex_hull_corridor"
-                if treatment_buffer_m is None
-                else f"wui_edge_buffer_{float(treatment_buffer_miles):g}_miles"
-            )
-        )
+        treatment_scope = "centroid_to_wui_edge_path_intersection"
         for window in windows:
             if window["kind"] == "previous_calendar_year":
                 lower_rule = "January 1 of previous calendar year, inclusive"
@@ -2281,8 +2252,7 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
                 "time_window_kind": window["kind"],
                 "path_search_distance_miles": path_distance_miles,
                 "treatment_config_signature": treatment_config_signature,
-                "spatial_definition": "nearest_path_intersection",
-                "angular_threshold": "",
+                "spatial_definition": "nearest_path_intersection_with_continuous_angular_coverage",
                 "time_lower_bound": lower_rule,
                 "time_upper_bound": upper_rule,
                 "completion_date_precision_rule": "use DATE_COMPL when exact; use FISCAL_Y_1 as fiscal-year interval; FY_AWARDED or missing year remains timing-unknown",
@@ -2290,8 +2260,14 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
                 "treatment_wui_buffer_miles": treatment_buffer_miles,
                 "fire_perimeter_threat_buffer_miles": perimeter_buffer_miles,
                 "comparison_rule": "path intersection=treated; no intersection=control; undated intersecting treatment=unknown",
-                "angular_treatment_rule": "not applicable",
-                "thickness_rule": "not applicable",
+                "angular_treatment_rule": (
+                    "continuous percent of visible WUI-boundary angles shielded by rolling-five-year treatment; "
+                    "candidate treatment polygons must intersect nearest centroid-to-WUI-edge path"
+                ),
+                "thickness_rule": (
+                    "calculate treatment thickness only when angular coverage is complete; "
+                    "0.25-degree weighted angular quadrature; report total and longest contiguous radial thickness"
+                ),
                 "fire_perimeter_control_rule": "within threat buffer and no overlap; unmatched perimeter is unknown",
                 "mixed_fire_rule": (
                     "retain fire only if at least one treated and one control fire-WUI path exist"
@@ -2305,24 +2281,6 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
                 ),
                 "angular_metrics_computed": compute_angular,
             })
-            for pct, threshold in thresholds_pct:
-                catalog_rows.append({
-                    "time_window": window["name"],
-                    "time_window_kind": window["kind"],
-                    "path_search_distance_miles": path_distance_miles,
-                    "spatial_definition": "angular_coverage_threshold",
-                    "angular_threshold": threshold,
-                    "time_lower_bound": lower_rule,
-                    "time_upper_bound": upper_rule,
-                    "completion_date_precision_rule": "use DATE_COMPL when exact; use FISCAL_Y_1 as fiscal-year interval; FY_AWARDED or missing year remains timing-unknown",
-                    "treatment_spatial_scope": treatment_scope,
-                    "treatment_wui_buffer_miles": treatment_buffer_miles,
-                    "fire_perimeter_threat_buffer_miles": perimeter_buffer_miles,
-                    "comparison_rule": "zero coverage is control; positive coverage below threshold excluded",
-                    "angular_treatment_rule": "share of visible WUI-boundary angles with a ray intersecting completed treatment before first WUI contact",
-                    "thickness_rule": "mean/p10/min/max total treatment length along visible rays; computed at 100 percent coverage",
-                    "fire_perimeter_control_rule": "within threat buffer and no overlap; unmatched perimeter is unknown",
-                })
         if not array_mode:
             sample_metrics = functions.filter_mixed_fire_path_dataset(
                 temporary_dir,
@@ -2355,7 +2313,7 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
         functions.write_csv(
             catalog_rows,
             temporary_catalog,
-            fieldnames=("time_window", "time_window_kind", "path_search_distance_miles", "spatial_definition", "angular_threshold", "time_lower_bound", "time_upper_bound", "completion_date_precision_rule", "treatment_spatial_scope", "treatment_wui_buffer_miles", "fire_perimeter_threat_buffer_miles", "comparison_rule", "angular_treatment_rule", "thickness_rule", "fire_perimeter_control_rule", "mixed_fire_rule", "path_sample_rule", "angular_metrics_computed"),
+            fieldnames=("time_window", "time_window_kind", "path_search_distance_miles", "spatial_definition", "time_lower_bound", "time_upper_bound", "completion_date_precision_rule", "treatment_spatial_scope", "treatment_wui_buffer_miles", "fire_perimeter_threat_buffer_miles", "comparison_rule", "angular_treatment_rule", "thickness_rule", "fire_perimeter_control_rule", "mixed_fire_rule", "path_sample_rule", "angular_metrics_computed"),
         )
         if array_mode:
             manifest = {
@@ -2416,7 +2374,7 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
         print(f"[output] Mixed-fire sample summary: {sample_summary_path}")
     print(
         f"[result] pairs={total_pairs:,}; exposure rows={total_exposure_rows:,}; "
-        f"perimeter matches={perimeter_matched:,}/{total_pairs:,}; windows={len(windows)}; thresholds={len(thresholds_pct)}"
+        f"perimeter matches={perimeter_matched:,}/{total_pairs:,}; windows={len(windows)}; angular measure=continuous percent"
     )
     if not array_mode:
         print(
@@ -2637,7 +2595,7 @@ def finalize_fire_wui_treatment_definitions(project):
         functions.write_csv(
             catalog_rows or [],
             temporary_catalog,
-            fieldnames=("time_window", "time_window_kind", "path_search_distance_miles", "spatial_definition", "angular_threshold", "time_lower_bound", "time_upper_bound", "completion_date_precision_rule", "treatment_spatial_scope", "treatment_wui_buffer_miles", "fire_perimeter_threat_buffer_miles", "comparison_rule", "angular_treatment_rule", "thickness_rule", "fire_perimeter_control_rule", "mixed_fire_rule", "path_sample_rule", "angular_metrics_computed"),
+            fieldnames=("time_window", "time_window_kind", "path_search_distance_miles", "spatial_definition", "time_lower_bound", "time_upper_bound", "completion_date_precision_rule", "treatment_spatial_scope", "treatment_wui_buffer_miles", "fire_perimeter_threat_buffer_miles", "comparison_rule", "angular_treatment_rule", "thickness_rule", "fire_perimeter_control_rule", "mixed_fire_rule", "path_sample_rule", "angular_metrics_computed"),
         )
         if output_dir.exists():
             shutil.rmtree(output_dir)

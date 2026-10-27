@@ -13,6 +13,7 @@ import initialization
 CONFIG = {
     "enabled_tasks": [
         "build_wui_singlepart_dataset",
+        "fire_filteration",
         "build_fire_wui_geometry_characteristics",
     ],
     "overwrite_existing": False,
@@ -20,13 +21,11 @@ CONFIG = {
     "treatment_rolling_years": [5],
     "treatment_include_previous_calendar_year": False,
     "treatment_lag_bands": [],
-    "treatment_angular_thresholds": [pct / 100 for pct in range(5, 101, 5)],
     "treatment_compute_angular_exposure": True,
     "treatment_require_mixed_fire_paths": True,
     "treatment_keep_only_classified_paths": True,
     "treatment_wui_buffer_miles": None,
     "fire_perimeter_threat_buffer_miles": 1.5,
-    "treatment_thickness_step_degrees": 0.25,
     "treatment_pair_batch_size": 256,
     "treatment_array_worker_id": None,
     "treatment_array_worker_count": None,
