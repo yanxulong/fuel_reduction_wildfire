@@ -14,11 +14,18 @@ TASK_REGISTRY: dict[str, Callable] = {
     "build_fire_wui_geometry_characteristics": tasks.build_fire_wui_geometry_characteristics,
     "build_fire_wui_centroid_paths": tasks.build_fire_wui_centroid_paths,
     "build_fire_wui_centroid_path_distance_samples": tasks.build_fire_wui_centroid_path_distance_samples,
+    "fire_filteration": tasks.fire_filteration,
     "build_wui_annual_mtbs_outcomes": tasks.build_wui_annual_mtbs_outcomes,
     "landfire_controls": tasks.landfire_controls,
     "prepare_facts_treatments": tasks.prepare_facts_treatments,
-    "build_fire_wui_treatment_definitions": tasks.build_fire_wui_treatment_definitions,
+    "build_fire_wui_treatment_definitions_rolling5y_mixed_fires": (
+        tasks.build_fire_wui_treatment_definitions_rolling5y_mixed_fires
+    ),
+    "build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi": (
+        tasks.build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi
+    ),
     "finalize_fire_wui_treatment_definitions": tasks.finalize_fire_wui_treatment_definitions,
+    "finalize_fire_wui_treatment_definitions_1p5mi": tasks.finalize_fire_wui_treatment_definitions_1p5mi,
 }
 
 
@@ -189,14 +196,36 @@ def initialize_paths(project: LocalProjectFlow, config: dict[str, object] | None
     )
 
     treatment_product = existing_product(
-        Path("data/processed/fire_wui_treatment_definitions"),
-        ("fire_wui_treatment_definitions_summary.csv", "treatment_definition_catalog.csv"),
+        Path("data/processed/fire_wui_treatment_path_rolling5y_mixed_fires"),
+        (
+            "fire_wui_treatment_path_rolling5y_mixed_fires_summary.csv",
+            "fire_wui_treatment_path_rolling5y_mixed_fires_catalog.csv",
+            "fire_wui_treatment_path_rolling5y_mixed_fires_sample_summary.csv",
+        ),
     )
     treatment_dataset, treatment_summary_paths = treatment_product or (
-        project_root / "data" / "processed" / "fire_wui_treatment_definitions",
+        project_root / "data" / "processed" / "fire_wui_treatment_path_rolling5y_mixed_fires",
         (
-            output_dir / "tables" / "fire_wui_treatment_definitions_summary.csv",
-            output_dir / "tables" / "treatment_definition_catalog.csv",
+            output_dir / "tables" / "fire_wui_treatment_path_rolling5y_mixed_fires_summary.csv",
+            output_dir / "tables" / "fire_wui_treatment_path_rolling5y_mixed_fires_catalog.csv",
+            output_dir / "tables" / "fire_wui_treatment_path_rolling5y_mixed_fires_sample_summary.csv",
+        ),
+    )
+
+    treatment_1p5mi_product = existing_product(
+        Path("data/processed/fire_wui_treatment_path_rolling5y_mixed_fires_1p5mi"),
+        (
+            "fire_wui_treatment_path_rolling5y_mixed_fires_1p5mi_summary.csv",
+            "fire_wui_treatment_path_rolling5y_mixed_fires_1p5mi_catalog.csv",
+            "fire_wui_treatment_path_rolling5y_mixed_fires_1p5mi_sample_summary.csv",
+        ),
+    )
+    treatment_1p5mi_dataset, treatment_1p5mi_summary_paths = treatment_1p5mi_product or (
+        project_root / "data" / "processed" / "fire_wui_treatment_path_rolling5y_mixed_fires_1p5mi",
+        (
+            output_dir / "tables" / "fire_wui_treatment_path_rolling5y_mixed_fires_1p5mi_summary.csv",
+            output_dir / "tables" / "fire_wui_treatment_path_rolling5y_mixed_fires_1p5mi_catalog.csv",
+            output_dir / "tables" / "fire_wui_treatment_path_rolling5y_mixed_fires_1p5mi_sample_summary.csv",
         ),
     )
 
@@ -281,7 +310,13 @@ def initialize_paths(project: LocalProjectFlow, config: dict[str, object] | None
         "fire_wui_treatment_dataset": treatment_dataset,
         "fire_wui_treatment_summary": treatment_summary_paths[0],
         "treatment_definition_catalog": treatment_summary_paths[1],
+        "fire_wui_treatment_sample_summary": treatment_summary_paths[2],
         "fire_wui_treatment_runs": treatment_dataset.parent / ".fire_wui_treatment_runs",
+        "fire_wui_treatment_dataset_1p5mi": treatment_1p5mi_dataset,
+        "fire_wui_treatment_summary_1p5mi": treatment_1p5mi_summary_paths[0],
+        "treatment_definition_catalog_1p5mi": treatment_1p5mi_summary_paths[1],
+        "fire_wui_treatment_sample_summary_1p5mi": treatment_1p5mi_summary_paths[2],
+        "fire_wui_treatment_runs_1p5mi": treatment_1p5mi_dataset.parent / ".fire_wui_treatment_runs_1p5mi",
         "mtbs_severity_raster_roots": mtbs_raster_roots,
         "mtbs_severity_raster_root": mtbs_raster_roots[0],
         "wui_annual_mtbs_outcomes": outcomes_dataset,

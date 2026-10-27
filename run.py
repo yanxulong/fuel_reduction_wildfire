@@ -13,23 +13,32 @@ import initialization
 CONFIG = {
     "enabled_tasks": [
         "build_wui_singlepart_dataset",
+        "fire_filteration",
         "build_fire_wui_geometry_characteristics",
     ],
     "overwrite_existing": False,
     "fire_wui_distance_miles": 3.0,
-    "treatment_rolling_years": list(range(1, 11)),
-    "treatment_lag_bands": [
-        ("lag_1_2y", 1, 2),
-        ("lag_2_4y", 2, 4),
-    ],
-    "treatment_angular_thresholds": [pct / 100 for pct in range(5, 101, 5)],
+    "treatment_rolling_years": [5],
+    "treatment_include_previous_calendar_year": False,
+    "treatment_lag_bands": [],
+    "treatment_compute_angular_exposure": True,
+    "treatment_require_mixed_fire_paths": True,
+    "treatment_keep_only_classified_paths": True,
     "treatment_wui_buffer_miles": None,
     "fire_perimeter_threat_buffer_miles": 1.5,
-    "treatment_thickness_step_degrees": 0.25,
     "treatment_pair_batch_size": 256,
     "treatment_array_worker_id": None,
     "treatment_array_worker_count": None,
     "treatment_array_run_id": None,
+}
+
+TREATMENT_ARRAY_WORKER_TASKS = {
+    "build_fire_wui_treatment_definitions_rolling5y_mixed_fires",
+    "build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi",
+}
+TREATMENT_ARRAY_FINALIZER_TASKS = {
+    "finalize_fire_wui_treatment_definitions",
+    "finalize_fire_wui_treatment_definitions_1p5mi",
 }
 
 
@@ -76,17 +85,33 @@ def main() -> int:
         config["overwrite_existing"] = True
     if args.distance_miles is not None:
         config["fire_wui_distance_miles"] = args.distance_miles
+    fixed_1p5mi_tasks = {
+        "build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi",
+        "finalize_fire_wui_treatment_definitions_1p5mi",
+    }
+    if (
+        any(task in fixed_1p5mi_tasks for task in config["enabled_tasks"])
+        and args.distance_miles is not None
+        and abs(args.distance_miles - 1.5) > 1e-9
+    ):
+        raise SystemExit(
+            "Task build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi fixes distance at 1.5 miles."
+        )
     array_options_given = any((args.array_worker_id is not None, args.array_worker_count is not None, args.array_run_id))
     if array_options_given and not args.array_run_id:
         raise SystemExit("--array-run-id is required with treatment array options.")
     if args.array_worker_id is not None:
         if args.array_worker_count is None or args.array_worker_count < 1:
             raise SystemExit("--array-worker-count must be positive when --array-worker-id is supplied.")
-        if config["enabled_tasks"] != ["build_fire_wui_treatment_definitions"]:
-            raise SystemExit("Array worker mode requires only --task build_fire_wui_treatment_definitions.")
-    elif array_options_given and config["enabled_tasks"] != ["finalize_fire_wui_treatment_definitions"]:
+        if len(config["enabled_tasks"]) != 1 or config["enabled_tasks"][0] not in TREATMENT_ARRAY_WORKER_TASKS:
+            raise SystemExit(
+                "Array worker mode requires exactly one registered rolling-5y mixed-fire treatment task."
+            )
+    elif array_options_given and (
+        len(config["enabled_tasks"]) != 1 or config["enabled_tasks"][0] not in TREATMENT_ARRAY_FINALIZER_TASKS
+    ):
         raise SystemExit("Array metadata without a worker ID is reserved for the treatment finalizer task.")
-    if "finalize_fire_wui_treatment_definitions" in config["enabled_tasks"] and args.array_worker_count is None:
+    if any(task in TREATMENT_ARRAY_FINALIZER_TASKS for task in config["enabled_tasks"]) and args.array_worker_count is None:
         raise SystemExit("Finalizer requires --array-worker-count and --array-run-id.")
     if config.get("overwrite_existing", False):
         print("[policy] overwrite enabled; existing task outputs may be rebuilt.")

@@ -7,13 +7,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 RAW_ROOT="$PROJECT_ROOT/data/raw"
 RUN_ID="$(date -u '+%Y%m%dT%H%M%SZ')"
-RUN_DATE="${DATA_SNAPSHOT_DATE:-${RUN_ID%%T*}}"
 MANIFEST="$RAW_ROOT/dataset_download_manifest_${RUN_ID}.tsv"
-
-if [[ ! "$RUN_DATE" =~ ^[0-9]{8}$ ]]; then
-    printf '[error] DATA_SNAPSHOT_DATE must use YYYYMMDD format; got: %s\n' "$RUN_DATE" >&2
-    exit 2
-fi
 
 FACTS_URL="https://data.fs.usda.gov/geodata/edw/edw_resources/shp/Actv_HazFuelTrt_PL.zip"
 MTBS_URL="https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/MTBS_Fire/data/composite_data/burned_area_extent_shapefile/mtbs_perimeter_data.zip"
@@ -24,7 +18,7 @@ mkdir -p "$RAW_ROOT"
 printf 'dataset\tpath\tsource_url\tbytes\tsha256\trecorded_utc\n' > "$MANIFEST"
 printf '[start] project: %s\n' "$PROJECT_ROOT"
 printf '[start] raw root: %s\n' "$RAW_ROOT"
-printf '[start] snapshot date: %s\n' "$RUN_DATE"
+printf '[start] run id: %s\n' "$RUN_ID"
 printf '[start] manifest: %s\n' "$MANIFEST"
 df -h "$RAW_ROOT"
 if command -v quota >/dev/null 2>&1; then
@@ -84,7 +78,7 @@ download_zip() {
 }
 
 printf '\n[stage 1/4] FACTS treatment polygons\n'
-FACTS_DIR="$RAW_ROOT/FACTS/snapshot_${RUN_DATE}"
+FACTS_DIR="$RAW_ROOT/FACTS"
 FACTS_ZIP="$FACTS_DIR/Actv_HazFuelTrt_PL.zip"
 FACTS_EXTRACT="$FACTS_DIR/Actv_HazFuelTrt_PL"
 FACTS_SHP="$FACTS_EXTRACT/Actv_HazFuelTrt_PL.shp"
@@ -139,7 +133,7 @@ fi
 printf '[verified] TIGER county shapefile: %s\n' "$TIGER_EXTRACT/tl_2023_us_county.shp"
 
 printf '\n[stage 4/4] MTBS national burned-area perimeter polygons\n'
-MTBS_DIR="$RAW_ROOT/MTBS/snapshot_${RUN_DATE}"
+MTBS_DIR="$RAW_ROOT/MTBS"
 MTBS_ZIP="$MTBS_DIR/mtbs_perimeter_data.zip"
 download_zip "MTBS_PERIMETERS" "$MTBS_URL" "$MTBS_ZIP"
 MTBS_EXTRACT="$MTBS_DIR/mtbs_perimeter_data"
