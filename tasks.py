@@ -8,10 +8,8 @@ Contents:
 - fire_filteration: run fire-centroid-to-WUI-edge filtering at 1 to 10 miles in 0.5-mile steps
 - build_wui_annual_mtbs_outcomes: calculate annual burn, area, and severity for WUI single parts
 - prepare_facts_treatments: retain completed FACTS prevention polygons and treatment-date provenance
-- build_fire_wui_treatment_definitions_rolling5y_mixed_fires: build five-year direct-path treatment, continuous angular coverage, and full-coverage thickness measures
-- build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi: build same treatment measures using 1.5-mile fire-WUI paths
-- finalize_fire_wui_treatment_definitions: validate workers, retain mixed treated/control fires, and publish path sample
-- finalize_fire_wui_treatment_definitions_1p5mi: validate 1.5-mile workers and publish isolated path sample
+- build_fire_wui_treatment_definitions: create treatment windows, path/angular exposure, thickness, and fire-perimeter controls
+- finalize_fire_wui_treatment_definitions: validate treatment array manifests and atomically assemble worker outputs
 - landfire_controls: summarize LF2020 terrain rasters for WUI single parts, MTBS fire points, and MTBS fire areas
 """
 
@@ -1653,40 +1651,6 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
     if not math.isfinite(path_distance_miles) or path_distance_miles <= 0:
         raise ValueError(f"fire_wui_distance_miles must be positive and finite; got {path_distance_miles}")
     path_distance_label = f"{path_distance_miles:g}mi"
-    task_name = str(
-        project.config.get(
-            "treatment_task_name",
-            "build_fire_wui_treatment_definitions_rolling5y_mixed_fires",
-        )
-    )
-    treatment_config_signature = hashlib.sha256(json.dumps(
-        {
-            "rolling_years": list(project.config.get("treatment_rolling_years", range(1, 11))),
-            "include_previous_calendar_year": bool(
-                project.config.get("treatment_include_previous_calendar_year", True)
-            ),
-            "lag_bands": list(project.config.get(
-                "treatment_lag_bands", (("lag_1_2y", 1, 2), ("lag_2_4y", 2, 4))
-            )),
-            "compute_angular_exposure": bool(
-                project.config.get("treatment_compute_angular_exposure", True)
-            ),
-            "compute_thickness_when_full": True,
-            "thickness_step_degrees": 0.25,
-            "treatment_wui_buffer_miles": project.config.get("treatment_wui_buffer_miles", 1.5),
-            "fire_perimeter_threat_buffer_miles": project.config.get(
-                "fire_perimeter_threat_buffer_miles", 1.5
-            ),
-            "require_mixed_fire_paths": bool(
-                project.config.get("treatment_require_mixed_fire_paths", True)
-            ),
-            "keep_only_classified_paths": bool(
-                project.config.get("treatment_keep_only_classified_paths", True)
-            ),
-        },
-        sort_keys=True,
-        default=str,
-    ).encode("utf-8")).hexdigest()
     path_root = project.paths["fire_wui_path_dataset"] / f"distance_{path_distance_label}"
     singlepart_root = project.paths["wui_singlepart_dataset"]
     output_dir = project.paths["fire_wui_treatment_dataset"]
@@ -1741,14 +1705,8 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
             raise FileExistsError(
                 f"Unverified worker output already exists: {worker_output_dir}; use a fresh --array-run-id."
             )
-    elif functions.should_skip(overwrite, [output_dir, summary_path, catalog_path, sample_summary_path]):
-        functions.skip_task(
-            task_name,
-            output_dir,
-            summary_path,
-            catalog_path,
-            sample_summary_path,
-        )
+    elif functions.should_skip(overwrite, [output_dir, summary_path, catalog_path]):
+        functions.skip_task("build_fire_wui_treatment_definitions", output_dir, summary_path, catalog_path)
         return {"status": "skipped", "dataset": output_dir, "summary": summary_path}
     if not path_root.is_dir() or not singlepart_root.is_dir():
         raise FileNotFoundError(
@@ -1778,12 +1736,6 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
     pair_batch_size = max(1, int(project.config.get("treatment_pair_batch_size", 256)))
     if treatment_buffer_miles is not None and float(treatment_buffer_miles) <= 0:
         raise ValueError("treatment_wui_buffer_miles must be positive or None")
-    if treatment_buffer_miles is not None:
-        raise ValueError(
-            f"The focused 5-year, {path_distance_miles:g}-mile sample uses treatment polygons "
-            "intersecting the direct fire-WUI path; "
-            "set treatment_wui_buffer_miles=None."
-        )
     if perimeter_buffer_miles < 0:
         raise ValueError("fire_perimeter_threat_buffer_miles cannot be negative")
 
@@ -2435,22 +2387,9 @@ def finalize_fire_wui_treatment_definitions(project):
     output_dir = project.paths["fire_wui_treatment_dataset"]
     summary_path = project.paths["fire_wui_treatment_summary"]
     catalog_path = project.paths["treatment_definition_catalog"]
-    sample_summary_path = project.paths["fire_wui_treatment_sample_summary"]
-    finalizer_task_name = str(
-        project.config.get(
-            "treatment_finalizer_task_name",
-            "finalize_fire_wui_treatment_definitions",
-        )
-    )
     overwrite = bool(project.config.get("overwrite_existing", False))
-    if functions.should_skip(overwrite, [output_dir, summary_path, catalog_path, sample_summary_path]):
-        functions.skip_task(
-            finalizer_task_name,
-            output_dir,
-            summary_path,
-            catalog_path,
-            sample_summary_path,
-        )
+    if functions.should_skip(overwrite, [output_dir, summary_path, catalog_path]):
+        functions.skip_task("finalize_fire_wui_treatment_definitions", output_dir, summary_path, catalog_path)
         return {"status": "skipped", "dataset": output_dir, "summary": summary_path}
 
     run_root = project.paths["fire_wui_treatment_runs"] / run_id
