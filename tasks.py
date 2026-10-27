@@ -9,6 +9,7 @@ Contents:
 - build_wui_annual_mtbs_outcomes: calculate annual burn, area, and severity for WUI single parts
 - prepare_facts_treatments: retain completed FACTS prevention polygons and treatment-date provenance
 - build_fire_wui_treatment_definitions: create treatment windows, path/angular exposure, thickness, and fire-perimeter controls
+- build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi: build isolated 1.5-mile rolling-5y mixed-fire treatment paths
 - finalize_fire_wui_treatment_definitions: validate treatment array manifests and atomically assemble worker outputs
 - landfire_controls: summarize LF2020 terrain rasters for WUI single parts, MTBS fire points, and MTBS fire areas
 """

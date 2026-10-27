@@ -103,11 +103,16 @@ def main() -> int:
     if args.array_worker_id is not None:
         if args.array_worker_count is None or args.array_worker_count < 1:
             raise SystemExit("--array-worker-count must be positive when --array-worker-id is supplied.")
-        if config["enabled_tasks"] != ["build_fire_wui_treatment_definitions"]:
-            raise SystemExit("Array worker mode requires only --task build_fire_wui_treatment_definitions.")
-    elif array_options_given and config["enabled_tasks"] != ["finalize_fire_wui_treatment_definitions"]:
-        raise SystemExit("Array metadata without a worker ID is reserved for the treatment finalizer task.")
-    if any(task in TREATMENT_ARRAY_FINALIZER_TASKS for task in config["enabled_tasks"]) and args.array_worker_count is None:
+        if len(config["enabled_tasks"]) != 1 or config["enabled_tasks"][0] not in TREATMENT_ARRAY_WORKER_TASKS:
+            choices = ", ".join(sorted(TREATMENT_ARRAY_WORKER_TASKS))
+            raise SystemExit(f"Array worker mode requires one treatment worker task: {choices}.")
+    elif array_options_given and (
+        len(config["enabled_tasks"]) != 1 or config["enabled_tasks"][0] not in TREATMENT_ARRAY_FINALIZER_TASKS
+    ):
+        raise SystemExit("Array metadata without a worker ID requires one treatment finalizer task.")
+    if any(task in TREATMENT_ARRAY_FINALIZER_TASKS for task in config["enabled_tasks"]) and (
+        args.array_worker_count is None or not args.array_run_id
+    ):
         raise SystemExit("Finalizer requires --array-worker-count and --array-run-id.")
     if config.get("overwrite_existing", False):
         print("[policy] overwrite enabled; existing task outputs may be rebuilt.")

@@ -18,7 +18,12 @@ TASK_REGISTRY: dict[str, Callable] = {
     "build_wui_annual_mtbs_outcomes": tasks.build_wui_annual_mtbs_outcomes,
     "landfire_controls": tasks.landfire_controls,
     "prepare_facts_treatments": tasks.prepare_facts_treatments,
-    "build_fire_wui_treatment_definitions": tasks.build_fire_wui_treatment_definitions,
+    "build_fire_wui_treatment_definitions_rolling5y_mixed_fires": (
+        tasks.build_fire_wui_treatment_definitions_rolling5y_mixed_fires
+    ),
+    "build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi": (
+        tasks.build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi
+    ),
     "finalize_fire_wui_treatment_definitions": tasks.finalize_fire_wui_treatment_definitions,
     "finalize_fire_wui_treatment_definitions_1p5mi": tasks.finalize_fire_wui_treatment_definitions_1p5mi,
 }
@@ -203,6 +208,24 @@ def initialize_paths(project: LocalProjectFlow, config: dict[str, object] | None
         (
             output_dir / "tables" / "fire_wui_treatment_definitions_summary.csv",
             output_dir / "tables" / "treatment_definition_catalog.csv",
+            output_dir / "tables" / "fire_wui_treatment_definitions_sample_summary.csv",
+        ),
+    )
+
+    treatment_1p5mi_product = existing_product(
+        Path("data/processed/fire_wui_treatment_path_rolling5y_mixed_fires_1p5mi"),
+        (
+            "fire_wui_treatment_path_rolling5y_mixed_fires_1p5mi_summary.csv",
+            "fire_wui_treatment_path_rolling5y_mixed_fires_1p5mi_catalog.csv",
+            "fire_wui_treatment_path_rolling5y_mixed_fires_1p5mi_sample_summary.csv",
+        ),
+    )
+    treatment_1p5mi_dataset, treatment_1p5mi_summary_paths = treatment_1p5mi_product or (
+        project_root / "data" / "processed" / "fire_wui_treatment_path_rolling5y_mixed_fires_1p5mi",
+        (
+            output_dir / "tables" / "fire_wui_treatment_path_rolling5y_mixed_fires_1p5mi_summary.csv",
+            output_dir / "tables" / "fire_wui_treatment_path_rolling5y_mixed_fires_1p5mi_catalog.csv",
+            output_dir / "tables" / "fire_wui_treatment_path_rolling5y_mixed_fires_1p5mi_sample_summary.csv",
         ),
     )
 
