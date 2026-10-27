@@ -7,8 +7,8 @@ Contents:
 - build_fire_wui_centroid_path_distance_samples: build path datasets for 1 to 10 miles
 - build_wui_annual_mtbs_outcomes: calculate annual burn, area, and severity for WUI single parts
 - prepare_facts_treatments: retain completed FACTS prevention polygons and treatment-date provenance
-- build_fire_wui_treatment_definitions: create treatment windows, path/angular exposure, thickness, and fire-perimeter controls
-- finalize_fire_wui_treatment_definitions: validate treatment array manifests and atomically assemble worker outputs
+- build_fire_wui_treatment_definitions_rolling5y_mixed_fires: build five-year path and angular treatment measures for mixed-exposure fires
+- finalize_fire_wui_treatment_definitions: validate workers, retain mixed treated/control fires, and publish path sample
 - landfire_controls: summarize LF2020 terrain rasters for WUI single parts, MTBS fire points, and MTBS fire areas
 """
 
@@ -1613,10 +1613,11 @@ def prepare_facts_treatments(project):
     }
 
 
-def build_fire_wui_treatment_definitions(project):
-    """Contents: link perimeters; build timing windows; measure path, angular exposure, and thickness."""
+def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
+    """Contents: link fire perimeters; measure five-year path and angular treatment exposure."""
     functions.configure_geospatial_environment()
 
+    import hashlib
     import math
     import json
     import os
@@ -1644,11 +1645,44 @@ def build_fire_wui_treatment_definitions(project):
     if not math.isfinite(path_distance_miles) or path_distance_miles <= 0:
         raise ValueError(f"fire_wui_distance_miles must be positive and finite; got {path_distance_miles}")
     path_distance_label = f"{path_distance_miles:g}mi"
+    treatment_config_signature = hashlib.sha256(json.dumps(
+        {
+            "rolling_years": list(project.config.get("treatment_rolling_years", range(1, 11))),
+            "include_previous_calendar_year": bool(
+                project.config.get("treatment_include_previous_calendar_year", True)
+            ),
+            "lag_bands": list(project.config.get(
+                "treatment_lag_bands", (("lag_1_2y", 1, 2), ("lag_2_4y", 2, 4))
+            )),
+            "compute_angular_exposure": bool(
+                project.config.get("treatment_compute_angular_exposure", True)
+            ),
+            "angular_thresholds": list(project.config.get(
+                "treatment_angular_thresholds", [pct / 100 for pct in range(5, 101, 5)]
+            )),
+            "treatment_wui_buffer_miles": project.config.get("treatment_wui_buffer_miles", 1.5),
+            "fire_perimeter_threat_buffer_miles": project.config.get(
+                "fire_perimeter_threat_buffer_miles", 1.5
+            ),
+            "require_mixed_fire_paths": bool(
+                project.config.get("treatment_require_mixed_fire_paths", True)
+            ),
+            "keep_only_classified_paths": bool(
+                project.config.get("treatment_keep_only_classified_paths", True)
+            ),
+            "thickness_step_degrees": float(
+                project.config.get("treatment_thickness_step_degrees", 0.25)
+            ),
+        },
+        sort_keys=True,
+        default=str,
+    ).encode("utf-8")).hexdigest()
     path_root = project.paths["fire_wui_path_dataset"] / f"distance_{path_distance_label}"
     singlepart_root = project.paths["wui_singlepart_dataset"]
     output_dir = project.paths["fire_wui_treatment_dataset"]
     summary_path = project.paths["fire_wui_treatment_summary"]
     catalog_path = project.paths["treatment_definition_catalog"]
+    sample_summary_path = project.paths["fire_wui_treatment_sample_summary"]
     overwrite = bool(project.config.get("overwrite_existing", False))
     raw_worker_id = project.config.get("treatment_array_worker_id")
     raw_worker_count = project.config.get("treatment_array_worker_count")
@@ -1680,6 +1714,7 @@ def build_fire_wui_treatment_definitions(project):
                     and completed_manifest.get("run_id") == array_run_id
                     and int(completed_manifest.get("worker_id", -1)) == worker_id
                     and int(completed_manifest.get("worker_count", -1)) == worker_count
+                    and completed_manifest.get("treatment_config_signature") == treatment_config_signature
                     and math.isclose(
                         float(completed_manifest.get("path_search_distance_miles", -1)),
                         path_distance_miles,
@@ -1696,8 +1731,14 @@ def build_fire_wui_treatment_definitions(project):
             raise FileExistsError(
                 f"Unverified worker output already exists: {worker_output_dir}; use a fresh --array-run-id."
             )
-    elif functions.should_skip(overwrite, [output_dir, summary_path, catalog_path]):
-        functions.skip_task("build_fire_wui_treatment_definitions", output_dir, summary_path, catalog_path)
+    elif functions.should_skip(overwrite, [output_dir, summary_path, catalog_path, sample_summary_path]):
+        functions.skip_task(
+            "build_fire_wui_treatment_definitions_rolling5y_mixed_fires",
+            output_dir,
+            summary_path,
+            catalog_path,
+            sample_summary_path,
+        )
         return {"status": "skipped", "dataset": output_dir, "summary": summary_path}
     if not path_root.is_dir() or not singlepart_root.is_dir():
         raise FileNotFoundError(
@@ -1709,14 +1750,30 @@ def build_fire_wui_treatment_definitions(project):
         rolling_years=project.config.get("treatment_rolling_years", range(1, 11)),
         lag_bands=project.config.get("treatment_lag_bands", (("lag_1_2y", 1, 2), ("lag_2_4y", 2, 4))),
     )
+    if not bool(project.config.get("treatment_include_previous_calendar_year", True)):
+        windows = [window for window in windows if window["kind"] != "previous_calendar_year"]
+    if not windows:
+        raise ValueError("Treatment task requires at least one configured timing window")
+    require_mixed_fire_paths = bool(project.config.get("treatment_require_mixed_fire_paths", True))
+    if not require_mixed_fire_paths:
+        raise ValueError("This focused treatment dataset requires mixed treated/control paths within each fire")
+    if require_mixed_fire_paths and [window["name"] for window in windows] != ["rolling_5y"]:
+        raise ValueError(
+            "Mixed-fire treatment sample requires exactly one window: rolling_5y; "
+            f"got {[window['name'] for window in windows]}"
+        )
+    compute_angular = bool(project.config.get("treatment_compute_angular_exposure", True))
     thresholds = tuple(sorted({float(value) for value in project.config.get(
         "treatment_angular_thresholds", (pct / 100 for pct in range(5, 101, 5))
-    )}))
-    if not thresholds or any(value <= 0 or value > 1 for value in thresholds):
+    )})) if compute_angular else ()
+    if compute_angular and (not thresholds or any(value <= 0 or value > 1 for value in thresholds)):
         raise ValueError(f"Angular coverage thresholds must be in (0, 1]; got {thresholds}")
-    if any(not math.isclose(value * 100 / 5, round(value * 100 / 5), abs_tol=1e-9) for value in thresholds):
+    if compute_angular and any(
+        not math.isclose(value * 100 / 5, round(value * 100 / 5), abs_tol=1e-9)
+        for value in thresholds
+    ):
         raise ValueError(f"Angular thresholds must use 5-percentage-point steps; got {thresholds}")
-    if 1.0 not in thresholds:
+    if compute_angular and 1.0 not in thresholds:
         thresholds = (*thresholds, 1.0)
     treatment_buffer_miles = project.config.get("treatment_wui_buffer_miles", 1.5)
     perimeter_buffer_miles = float(project.config.get("fire_perimeter_threat_buffer_miles", 1.5))
@@ -1731,6 +1788,12 @@ def build_fire_wui_treatment_definitions(project):
     thickness_step_degrees = float(project.config.get("treatment_thickness_step_degrees", 0.25))
     print(f"[input] Fire-WUI paths: {path_root}; max distance={path_distance_miles:g} miles", flush=True)
     print(f"[input] Eligible FACTS: {treatment_path}", flush=True)
+    print(
+        "[sample] windows=" + ",".join(window["name"] for window in windows)
+        + f"; path-only={not compute_angular}; mixed-fire filter="
+        + str(require_mixed_fire_paths),
+        flush=True,
+    )
     treatments = gpd.read_parquet(treatment_path)
     if treatments.crs is None:
         raise ValueError(f"Eligible FACTS parquet has no CRS: {treatment_path}")
@@ -1824,11 +1887,15 @@ def build_fire_wui_treatment_definitions(project):
         temporary_summary = temporary_stage_root / "summary.csv"
         temporary_catalog = temporary_stage_root / "catalog.csv"
         temporary_manifest = temporary_stage_root / "manifest.json"
+        temporary_sample_summary = None
     else:
         temporary_stage_root = None
         temporary_dir = Path(tempfile.mkdtemp(prefix=".fire_wui_treatment.", dir=output_dir.parent))
         temporary_summary = summary_path.with_name(f".{summary_path.name}.{os.getpid()}.tmp")
         temporary_catalog = catalog_path.with_name(f".{catalog_path.name}.{os.getpid()}.tmp")
+        temporary_sample_summary = sample_summary_path.with_name(
+            f".{sample_summary_path.name}.{os.getpid()}.tmp"
+        )
     summary_rows = []
     total_pairs = 0
     total_exposure_rows = 0
@@ -1874,7 +1941,9 @@ def build_fire_wui_treatment_definitions(project):
         direction_bin_24 = int(math.floor(angle_degrees / 15.0)) % 24
         distance_m = float(pair.get("fire_to_wui_edge_distance_m", path_geometry.length))
         distance_bin_500m = int(math.floor(distance_m / 500.0))
-        if treatment_buffer_m is None:
+        if not compute_angular:
+            search_geometry = path_geometry
+        elif treatment_buffer_m is None:
             search_geometry = shapely.convex_hull(shapely.union(origin, wui))
         else:
             search_geometry = wui.buffer(treatment_buffer_m)
@@ -1988,11 +2057,13 @@ def build_fire_wui_treatment_definitions(project):
             membership = memberships[:, window_idx]
             known_local_idx = np.flatnonzero(np.equal(membership, True)).tolist()
             uncertain_local_idx = np.flatnonzero(np.equal(membership, None)).tolist()
-            union_key, treatment_union = cached_union(known_local_idx)
+            path_local_idx = [index for index in known_local_idx if candidate_path_hits[index]]
+            union_local_idx = known_local_idx if compute_angular else path_local_idx
+            union_key, treatment_union = cached_union(union_local_idx)
             known_path_intersection, path_length = cached_path_summary(union_key, treatment_union)
             uncertain_path_hit = bool(candidate_path_hits[uncertain_local_idx].any())
             possible_coverage = None
-            if uncertain_local_idx:
+            if compute_angular and uncertain_local_idx:
                 possible_local_idx = sorted((*known_local_idx, *uncertain_local_idx))
                 possible_key, possible_union = cached_union(possible_local_idx)
                 possible_angular = cached_angular(possible_key, possible_union, False)
@@ -2003,10 +2074,24 @@ def build_fire_wui_treatment_definitions(project):
                 nearest_status = "unknown"
             else:
                 nearest_status = "control"
-            angular = cached_angular(union_key, treatment_union, True)
-            coverage = angular["angular_coverage_fraction"]
-            if not uncertain_local_idx:
-                possible_coverage = coverage
+            if compute_angular:
+                angular = cached_angular(union_key, treatment_union, True)
+                coverage = angular["angular_coverage_fraction"]
+                if not uncertain_local_idx:
+                    possible_coverage = coverage
+            else:
+                angular = {
+                    "angular_total_degrees": np.nan,
+                    "angular_covered_degrees": np.nan,
+                    "angular_coverage_fraction": np.nan,
+                    "thickness_mean_m": np.nan,
+                    "thickness_p10_m": np.nan,
+                    "thickness_min_m": np.nan,
+                    "thickness_max_m": np.nan,
+                    "contiguous_thickness_mean_m": np.nan,
+                    "angular_geometry_status": "not_computed_for_path_only_run",
+                }
+                coverage = None
             date_complete = len(uncertain_local_idx) == 0
             known_treatment_ids = [candidate_ids[index] for index in known_local_idx]
             uncertain_treatment_ids = [candidate_ids[index] for index in uncertain_local_idx]
@@ -2173,9 +2258,13 @@ def build_fire_wui_treatment_definitions(project):
 
         catalog_rows = []
         treatment_scope = (
-            "fire_wui_convex_hull_corridor"
-            if treatment_buffer_m is None
-            else f"wui_edge_buffer_{float(treatment_buffer_miles):g}_miles"
+            "centroid_to_wui_edge_path_intersection"
+            if not compute_angular
+            else (
+                "fire_wui_convex_hull_corridor"
+                if treatment_buffer_m is None
+                else f"wui_edge_buffer_{float(treatment_buffer_miles):g}_miles"
+            )
         )
         for window in windows:
             if window["kind"] == "previous_calendar_year":
@@ -2191,6 +2280,7 @@ def build_fire_wui_treatment_definitions(project):
                 "time_window": window["name"],
                 "time_window_kind": window["kind"],
                 "path_search_distance_miles": path_distance_miles,
+                "treatment_config_signature": treatment_config_signature,
                 "spatial_definition": "nearest_path_intersection",
                 "angular_threshold": "",
                 "time_lower_bound": lower_rule,
@@ -2203,6 +2293,17 @@ def build_fire_wui_treatment_definitions(project):
                 "angular_treatment_rule": "not applicable",
                 "thickness_rule": "not applicable",
                 "fire_perimeter_control_rule": "within threat buffer and no overlap; unmatched perimeter is unknown",
+                "mixed_fire_rule": (
+                    "retain fire only if at least one treated and one control fire-WUI path exist"
+                    if bool(project.config.get("treatment_require_mixed_fire_paths", True))
+                    else "no fire-level mixed-exposure restriction"
+                ),
+                "path_sample_rule": (
+                    "retain treated/control paths; exclude unknown timing paths"
+                    if bool(project.config.get("treatment_keep_only_classified_paths", True))
+                    else "retain all path statuses for qualifying fires"
+                ),
+                "angular_metrics_computed": compute_angular,
             })
             for pct, threshold in thresholds_pct:
                 catalog_rows.append({
@@ -2222,6 +2323,30 @@ def build_fire_wui_treatment_definitions(project):
                     "thickness_rule": "mean/p10/min/max total treatment length along visible rays; computed at 100 percent coverage",
                     "fire_perimeter_control_rule": "within threat buffer and no overlap; unmatched perimeter is unknown",
                 })
+        if not array_mode:
+            sample_metrics = functions.filter_mixed_fire_path_dataset(
+                temporary_dir,
+                required_window="rolling_5y",
+                keep_only_classified_paths=bool(
+                    project.config.get("treatment_keep_only_classified_paths", True)
+                ),
+            )
+            functions.write_csv(
+                [{
+                    "run_id": "single_process",
+                    "time_window": "rolling_5y",
+                    "sample_rule": "fire has at least one treated and one control centroid-to-WUI path",
+                    **sample_metrics,
+                }],
+                temporary_sample_summary,
+                fieldnames=(
+                    "run_id", "time_window", "sample_rule", "input_fire_wui_paths",
+                    "input_unique_fires", "input_treated_paths", "input_control_paths",
+                    "input_unknown_paths", "qualifying_fires", "retained_fire_wui_paths",
+                    "retained_treated_paths", "retained_control_paths", "excluded_fire_wui_paths",
+                ),
+            )
+
         functions.write_csv(
             summary_rows,
             temporary_summary,
@@ -2230,7 +2355,7 @@ def build_fire_wui_treatment_definitions(project):
         functions.write_csv(
             catalog_rows,
             temporary_catalog,
-            fieldnames=("time_window", "time_window_kind", "path_search_distance_miles", "spatial_definition", "angular_threshold", "time_lower_bound", "time_upper_bound", "completion_date_precision_rule", "treatment_spatial_scope", "treatment_wui_buffer_miles", "fire_perimeter_threat_buffer_miles", "comparison_rule", "angular_treatment_rule", "thickness_rule", "fire_perimeter_control_rule"),
+            fieldnames=("time_window", "time_window_kind", "path_search_distance_miles", "spatial_definition", "angular_threshold", "time_lower_bound", "time_upper_bound", "completion_date_precision_rule", "treatment_spatial_scope", "treatment_wui_buffer_miles", "fire_perimeter_threat_buffer_miles", "comparison_rule", "angular_treatment_rule", "thickness_rule", "fire_perimeter_control_rule", "mixed_fire_rule", "path_sample_rule", "angular_metrics_computed"),
         )
         if array_mode:
             manifest = {
@@ -2272,6 +2397,8 @@ def build_fire_wui_treatment_definitions(project):
         temporary_dir.replace(output_dir)
         temporary_summary.replace(summary_path)
         temporary_catalog.replace(catalog_path)
+        if not array_mode:
+            temporary_sample_summary.replace(sample_summary_path)
     except BaseException:
         if temporary_stage_root is not None:
             shutil.rmtree(temporary_stage_root, ignore_errors=True)
@@ -2279,19 +2406,32 @@ def build_fire_wui_treatment_definitions(project):
             shutil.rmtree(temporary_dir, ignore_errors=True)
         temporary_summary.unlink(missing_ok=True)
         temporary_catalog.unlink(missing_ok=True)
+        if temporary_sample_summary is not None:
+            temporary_sample_summary.unlink(missing_ok=True)
         raise
 
     print(f"[output] Fire-WUI treatment definitions: {output_dir}")
     print(f"[output] Treatment definition catalog: {catalog_path}")
+    if not array_mode:
+        print(f"[output] Mixed-fire sample summary: {sample_summary_path}")
     print(
         f"[result] pairs={total_pairs:,}; exposure rows={total_exposure_rows:,}; "
         f"perimeter matches={perimeter_matched:,}/{total_pairs:,}; windows={len(windows)}; thresholds={len(thresholds_pct)}"
     )
+    if not array_mode:
+        print(
+            f"[sample] qualifying fires={sample_metrics['qualifying_fires']:,}; "
+            f"retained paths={sample_metrics['retained_fire_wui_paths']:,}; "
+            f"treated={sample_metrics['retained_treated_paths']:,}; "
+            f"controls={sample_metrics['retained_control_paths']:,}",
+            flush=True,
+        )
     return {
         "status": "built",
         "dataset": output_dir,
         "summary": summary_path,
         "catalog": catalog_path,
+        "sample_summary": sample_summary_path if not array_mode else None,
         "pairs": total_pairs,
         "exposure_rows": total_exposure_rows,
         "perimeter_matches": perimeter_matched,
@@ -2328,9 +2468,16 @@ def finalize_fire_wui_treatment_definitions(project):
     output_dir = project.paths["fire_wui_treatment_dataset"]
     summary_path = project.paths["fire_wui_treatment_summary"]
     catalog_path = project.paths["treatment_definition_catalog"]
+    sample_summary_path = project.paths["fire_wui_treatment_sample_summary"]
     overwrite = bool(project.config.get("overwrite_existing", False))
-    if functions.should_skip(overwrite, [output_dir, summary_path, catalog_path]):
-        functions.skip_task("finalize_fire_wui_treatment_definitions", output_dir, summary_path, catalog_path)
+    if functions.should_skip(overwrite, [output_dir, summary_path, catalog_path, sample_summary_path]):
+        functions.skip_task(
+            "finalize_fire_wui_treatment_definitions",
+            output_dir,
+            summary_path,
+            catalog_path,
+            sample_summary_path,
+        )
         return {"status": "skipped", "dataset": output_dir, "summary": summary_path}
 
     run_root = project.paths["fire_wui_treatment_runs"] / run_id
@@ -2350,6 +2497,12 @@ def finalize_fire_wui_treatment_definitions(project):
         ):
             raise ValueError(f"Worker manifest identity/status mismatch: {manifest_path}")
         manifests.append(manifest)
+
+    treatment_signatures = {
+        manifest.get("treatment_config_signature") for manifest in manifests
+    }
+    if len(treatment_signatures) != 1 or None in treatment_signatures:
+        raise ValueError("Treatment workers used different or unrecorded treatment configurations")
 
     expected_shards = manifests[0].get("expected_source_shards")
     if not isinstance(expected_shards, list) or not expected_shards:
@@ -2425,6 +2578,7 @@ def finalize_fire_wui_treatment_definitions(project):
     temporary_dir.mkdir()
     temporary_summary = temporary_root / "summary.csv"
     temporary_catalog = temporary_root / "catalog.csv"
+    temporary_sample_summary = temporary_root / "sample_summary.csv"
     try:
         shard_files = [
             (path, dataset_dir)
@@ -2447,6 +2601,34 @@ def finalize_fire_wui_treatment_definitions(project):
                     shutil.copy2(source, destination)
                 progress.update(1)
 
+        sample_metrics = functions.filter_mixed_fire_path_dataset(
+            temporary_dir,
+            required_window="rolling_5y",
+            keep_only_classified_paths=bool(
+                project.config.get("treatment_keep_only_classified_paths", True)
+            ),
+        )
+        if sample_metrics["input_fire_wui_paths"] != total_rows:
+            raise ValueError(
+                "Worker exposure-row total differs from assembled path rows: "
+                f"{total_rows:,} != {sample_metrics['input_fire_wui_paths']:,}"
+            )
+        functions.write_csv(
+            [{
+                "run_id": run_id,
+                "time_window": "rolling_5y",
+                "sample_rule": "fire has at least one treated and one control centroid-to-WUI path",
+                **sample_metrics,
+            }],
+            temporary_sample_summary,
+            fieldnames=(
+                "run_id", "time_window", "sample_rule", "input_fire_wui_paths",
+                "input_unique_fires", "input_treated_paths", "input_control_paths",
+                "input_unknown_paths", "qualifying_fires", "retained_fire_wui_paths",
+                "retained_treated_paths", "retained_control_paths", "excluded_fire_wui_paths",
+            ),
+        )
+
         functions.write_csv(
             summary_rows,
             temporary_summary,
@@ -2455,13 +2637,14 @@ def finalize_fire_wui_treatment_definitions(project):
         functions.write_csv(
             catalog_rows or [],
             temporary_catalog,
-            fieldnames=("time_window", "time_window_kind", "path_search_distance_miles", "spatial_definition", "angular_threshold", "time_lower_bound", "time_upper_bound", "completion_date_precision_rule", "treatment_spatial_scope", "treatment_wui_buffer_miles", "fire_perimeter_threat_buffer_miles", "comparison_rule", "angular_treatment_rule", "thickness_rule", "fire_perimeter_control_rule"),
+            fieldnames=("time_window", "time_window_kind", "path_search_distance_miles", "spatial_definition", "angular_threshold", "time_lower_bound", "time_upper_bound", "completion_date_precision_rule", "treatment_spatial_scope", "treatment_wui_buffer_miles", "fire_perimeter_threat_buffer_miles", "comparison_rule", "angular_treatment_rule", "thickness_rule", "fire_perimeter_control_rule", "mixed_fire_rule", "path_sample_rule", "angular_metrics_computed"),
         )
         if output_dir.exists():
             shutil.rmtree(output_dir)
         temporary_dir.replace(output_dir)
         temporary_summary.replace(summary_path)
         temporary_catalog.replace(catalog_path)
+        temporary_sample_summary.replace(sample_summary_path)
     except BaseException:
         shutil.rmtree(temporary_root, ignore_errors=True)
         raise
@@ -2469,10 +2652,13 @@ def finalize_fire_wui_treatment_definitions(project):
 
     print(f"[output] Fire-WUI treatment definitions: {output_dir}")
     print(f"[output] Treatment definition catalog: {catalog_path}")
+    print(f"[output] Mixed-fire sample summary: {sample_summary_path}")
     print(f"[provenance] Worker manifests retained: {run_root}")
     print(
         f"[result] pairs={total_pairs:,}; exposure rows={total_rows:,}; "
         f"perimeter matches={perimeter_matches:,}/{total_pairs:,}; "
+        f"qualifying fires={sample_metrics['qualifying_fires']:,}; "
+        f"retained paths={sample_metrics['retained_fire_wui_paths']:,}; "
         f"workers={worker_count}; shards={len(expected_shards)}"
     )
     return {
@@ -2480,6 +2666,7 @@ def finalize_fire_wui_treatment_definitions(project):
         "dataset": output_dir,
         "summary": summary_path,
         "catalog": catalog_path,
+        "sample_summary": sample_summary_path,
         "run_manifest_root": run_root,
         "workers": worker_count,
         "shards": len(expected_shards),

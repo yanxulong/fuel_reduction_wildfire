@@ -17,12 +17,13 @@ CONFIG = {
     ],
     "overwrite_existing": False,
     "fire_wui_distance_miles": 3.0,
-    "treatment_rolling_years": list(range(1, 11)),
-    "treatment_lag_bands": [
-        ("lag_1_2y", 1, 2),
-        ("lag_2_4y", 2, 4),
-    ],
+    "treatment_rolling_years": [5],
+    "treatment_include_previous_calendar_year": False,
+    "treatment_lag_bands": [],
     "treatment_angular_thresholds": [pct / 100 for pct in range(5, 101, 5)],
+    "treatment_compute_angular_exposure": True,
+    "treatment_require_mixed_fire_paths": True,
+    "treatment_keep_only_classified_paths": True,
     "treatment_wui_buffer_miles": None,
     "fire_perimeter_threat_buffer_miles": 1.5,
     "treatment_thickness_step_degrees": 0.25,
@@ -82,8 +83,11 @@ def main() -> int:
     if args.array_worker_id is not None:
         if args.array_worker_count is None or args.array_worker_count < 1:
             raise SystemExit("--array-worker-count must be positive when --array-worker-id is supplied.")
-        if config["enabled_tasks"] != ["build_fire_wui_treatment_definitions"]:
-            raise SystemExit("Array worker mode requires only --task build_fire_wui_treatment_definitions.")
+        if config["enabled_tasks"] != ["build_fire_wui_treatment_definitions_rolling5y_mixed_fires"]:
+            raise SystemExit(
+                "Array worker mode requires only "
+                "--task build_fire_wui_treatment_definitions_rolling5y_mixed_fires."
+            )
     elif array_options_given and config["enabled_tasks"] != ["finalize_fire_wui_treatment_definitions"]:
         raise SystemExit("Array metadata without a worker ID is reserved for the treatment finalizer task.")
     if "finalize_fire_wui_treatment_definitions" in config["enabled_tasks"] and args.array_worker_count is None:

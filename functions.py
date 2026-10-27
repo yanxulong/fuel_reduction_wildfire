@@ -14,6 +14,7 @@ Contents:
 - treatment_window_membership_matrix: classify candidate treatments across all windows in vectorized batches
 - polygon_geometry_characteristics: calculate vectorized polygon size, shape, bounds, centroid, and validity
 - angular_treatment_metrics: measure WUI-facing angular treatment coverage and thickness
+- filter_mixed_fire_path_dataset: retain classified paths from fires with treated and control paths
 - write_csv: write CSV atomically
 - should_skip, skip_task: skip-if-existing logic and log message
 """
@@ -1097,6 +1098,94 @@ def write_csv(
     finally:
         temporary_path.unlink(missing_ok=True)
     return path
+
+
+def filter_mixed_fire_path_dataset(
+    dataset_dir: Path,
+    *,
+    required_window: str = "rolling_5y",
+    keep_only_classified_paths: bool = True,
+) -> dict[str, int]:
+    """Keep treated/control paths only for fires containing both path statuses."""
+    import pandas as pd
+    from tqdm import tqdm
+
+    dataset_dir = Path(dataset_dir)
+    parquet_files = sorted(path for path in dataset_dir.rglob("*.parquet") if path.is_file())
+    if not parquet_files:
+        raise FileNotFoundError(f"No treatment-path Parquet files found under {dataset_dir}")
+
+    fire_states: dict[str, list[bool]] = {}
+    input_rows = treated_rows = control_rows = unknown_rows = 0
+    for path in tqdm(parquet_files, desc="Screen paths by fire", unit="file", dynamic_ncols=True):
+        frame = pd.read_parquet(
+            path,
+            columns=["fire_event_id_normalized", "nearest_path_treatment_status", "time_window"],
+        )
+        windows = set(frame["time_window"].dropna().astype(str))
+        if len(frame) and windows != {required_window}:
+            raise ValueError(
+                f"Treatment sample expects only {required_window}; found {sorted(windows)} in {path}"
+            )
+        input_rows += len(frame)
+        for fire_id, status in zip(
+            frame["fire_event_id_normalized"].tolist(),
+            frame["nearest_path_treatment_status"].tolist(),
+        ):
+            if fire_id is None or pd.isna(fire_id):
+                raise ValueError(f"Treatment path row lacks normalized fire ID: {path}")
+            key = str(fire_id)
+            state = str(status).casefold() if status is not None and not pd.isna(status) else "unknown"
+            flags = fire_states.setdefault(key, [False, False])
+            if state == "treated":
+                flags[0] = True
+                treated_rows += 1
+            elif state == "control":
+                flags[1] = True
+                control_rows += 1
+            else:
+                unknown_rows += 1
+
+    qualifying_fires = {
+        fire_id for fire_id, (has_treated, has_control) in fire_states.items()
+        if has_treated and has_control
+    }
+    retained_rows = retained_treated = retained_control = 0
+    for path in tqdm(parquet_files, desc="Write mixed-fire path sample", unit="file", dynamic_ncols=True):
+        frame = pd.read_parquet(path)
+        status = frame["nearest_path_treatment_status"].astype("string")
+        keep = frame["fire_event_id_normalized"].astype("string").isin(qualifying_fires)
+        if keep_only_classified_paths:
+            keep &= status.isin(("treated", "control"))
+        frame = frame.loc[keep].copy()
+        if frame.empty:
+            path.unlink()
+            continue
+        frame["fire_has_treated_path"] = 1
+        frame["fire_has_control_path"] = 1
+        frame["fire_mixed_treatment_control_sample"] = 1
+        retained_rows += len(frame)
+        retained_treated += int(status.loc[keep].eq("treated").sum())
+        retained_control += int(status.loc[keep].eq("control").sum())
+        temporary_path = path.with_name(f".{path.stem}.{os.getpid()}.tmp.parquet")
+        try:
+            frame.to_parquet(temporary_path, index=False, compression="zstd")
+            temporary_path.replace(path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
+
+    return {
+        "input_fire_wui_paths": input_rows,
+        "input_unique_fires": len(fire_states),
+        "input_treated_paths": treated_rows,
+        "input_control_paths": control_rows,
+        "input_unknown_paths": unknown_rows,
+        "qualifying_fires": len(qualifying_fires),
+        "retained_fire_wui_paths": retained_rows,
+        "retained_treated_paths": retained_treated,
+        "retained_control_paths": retained_control,
+        "excluded_fire_wui_paths": input_rows - retained_rows,
+    }
 
 
 def should_skip(overwrite_existing: bool, paths: Iterable[Path]) -> bool:
