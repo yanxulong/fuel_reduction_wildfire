@@ -10,7 +10,7 @@ Contents:
 - prepare_facts_treatments: retain completed FACTS prevention polygons and treatment-date provenance
 - build_fire_wui_treatment_definitions: create treatment windows, path/angular exposure, thickness, and fire-perimeter controls
 - build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi: build isolated 1.5-mile rolling-5y mixed-fire treatment paths
-- finalize_fire_wui_treatment_definitions: validate treatment array manifests and atomically assemble worker outputs
+- finalize_fire_wui_treatment_definitions: validate treatment array manifests and assemble worker outputs for both distance variants
 - landfire_controls: summarize LF2020 terrain rasters for WUI single parts, MTBS fire points, and MTBS fire areas
 """
 
@@ -2329,7 +2329,7 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
         functions.write_csv(
             catalog_rows,
             temporary_catalog,
-            fieldnames=("time_window", "time_window_kind", "path_search_distance_miles", "spatial_definition", "time_lower_bound", "time_upper_bound", "completion_date_precision_rule", "treatment_spatial_scope", "treatment_wui_buffer_miles", "fire_perimeter_threat_buffer_miles", "comparison_rule", "angular_treatment_rule", "thickness_rule", "fire_perimeter_control_rule", "mixed_fire_rule", "path_sample_rule", "angular_metrics_computed"),
+            fieldnames=("time_window", "time_window_kind", "path_search_distance_miles", "treatment_config_signature", "spatial_definition", "time_lower_bound", "time_upper_bound", "completion_date_precision_rule", "treatment_spatial_scope", "treatment_wui_buffer_miles", "fire_perimeter_threat_buffer_miles", "comparison_rule", "angular_treatment_rule", "thickness_rule", "fire_perimeter_control_rule", "mixed_fire_rule", "path_sample_rule", "angular_metrics_computed"),
         )
         if array_mode:
             manifest = {
@@ -2337,6 +2337,7 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
                 "run_id": array_run_id,
                 "worker_id": worker_id,
                 "worker_count": worker_count,
+                "treatment_config_signature": treatment_config_signature,
                 "path_search_distance_miles": path_distance_miles,
                 "expected_shard_count": len(all_source_shards),
                 "expected_source_shards": all_source_shards,
@@ -2442,10 +2443,25 @@ def finalize_fire_wui_treatment_definitions(project):
     output_dir = project.paths["fire_wui_treatment_dataset"]
     summary_path = project.paths["fire_wui_treatment_summary"]
     catalog_path = project.paths["treatment_definition_catalog"]
+    sample_summary_path = project.paths["fire_wui_treatment_sample_summary"]
     overwrite = bool(project.config.get("overwrite_existing", False))
-    if functions.should_skip(overwrite, [output_dir, summary_path, catalog_path]):
-        functions.skip_task("finalize_fire_wui_treatment_definitions", output_dir, summary_path, catalog_path)
-        return {"status": "skipped", "dataset": output_dir, "summary": summary_path}
+    if functions.should_skip(
+        overwrite, [output_dir, summary_path, catalog_path, sample_summary_path]
+    ):
+        functions.skip_task(
+            "finalize_fire_wui_treatment_definitions",
+            output_dir,
+            summary_path,
+            catalog_path,
+            sample_summary_path,
+        )
+        return {
+            "status": "skipped",
+            "dataset": output_dir,
+            "summary": summary_path,
+            "catalog": catalog_path,
+            "sample_summary": sample_summary_path,
+        }
 
     run_root = project.paths["fire_wui_treatment_runs"] / run_id
     worker_dirs = [run_root / f"worker_{worker_id:03d}" for worker_id in range(worker_count)]
@@ -2468,8 +2484,17 @@ def finalize_fire_wui_treatment_definitions(project):
     treatment_signatures = {
         manifest.get("treatment_config_signature") for manifest in manifests
     }
-    if len(treatment_signatures) != 1 or None in treatment_signatures:
+    legacy_unrecorded_signature = treatment_signatures == {None}
+    if len(treatment_signatures) != 1 or (
+        None in treatment_signatures and not legacy_unrecorded_signature
+    ):
         raise ValueError("Treatment workers used different or unrecorded treatment configurations")
+    if legacy_unrecorded_signature:
+        print(
+            "[validation] legacy worker manifests lack treatment signatures; "
+            "requiring identical worker catalogs",
+            flush=True,
+        )
 
     expected_shards = manifests[0].get("expected_source_shards")
     if not isinstance(expected_shards, list) or not expected_shards:
@@ -2528,6 +2553,9 @@ def finalize_fire_wui_treatment_definitions(project):
         total_pairs += int(manifest.get("fire_wui_pairs", 0))
         total_rows += int(manifest.get("treatment_window_rows", 0))
         perimeter_matches += int(manifest.get("perimeter_matched_pairs", 0))
+
+    if legacy_unrecorded_signature:
+        print("[validation] legacy worker catalogs match across all workers", flush=True)
 
     if len(assigned_shards) != len(set(assigned_shards)) or set(assigned_shards) != set(expected_shards):
         raise ValueError("Worker manifests do not cover each expected WUI shard exactly once")
@@ -2604,7 +2632,7 @@ def finalize_fire_wui_treatment_definitions(project):
         functions.write_csv(
             catalog_rows or [],
             temporary_catalog,
-            fieldnames=("time_window", "time_window_kind", "path_search_distance_miles", "spatial_definition", "time_lower_bound", "time_upper_bound", "completion_date_precision_rule", "treatment_spatial_scope", "treatment_wui_buffer_miles", "fire_perimeter_threat_buffer_miles", "comparison_rule", "angular_treatment_rule", "thickness_rule", "fire_perimeter_control_rule", "mixed_fire_rule", "path_sample_rule", "angular_metrics_computed"),
+            fieldnames=("time_window", "time_window_kind", "path_search_distance_miles", "treatment_config_signature", "spatial_definition", "time_lower_bound", "time_upper_bound", "completion_date_precision_rule", "treatment_spatial_scope", "treatment_wui_buffer_miles", "fire_perimeter_threat_buffer_miles", "comparison_rule", "angular_treatment_rule", "thickness_rule", "fire_perimeter_control_rule", "mixed_fire_rule", "path_sample_rule", "angular_metrics_computed"),
         )
         if output_dir.exists():
             shutil.rmtree(output_dir)
