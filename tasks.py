@@ -1654,6 +1654,60 @@ def build_fire_wui_treatment_definitions_rolling5y_mixed_fires(project):
     path_distance_label = f"{path_distance_miles:g}mi"
     path_root = project.paths["fire_wui_path_dataset"] / f"distance_{path_distance_label}"
     singlepart_root = project.paths["wui_singlepart_dataset"]
+    perimeter_candidates = project.paths.get("mtbs_perimeter_candidates", ())
+    if not isinstance(perimeter_candidates, (tuple, list)):
+        perimeter_candidates = (perimeter_candidates,)
+    perimeter_source_fingerprints = []
+    for candidate_value in perimeter_candidates:
+        candidate = Path(candidate_value)
+        if candidate.suffix.casefold() != ".shp" or not candidate.is_file():
+            continue
+        for component in (
+            candidate,
+            candidate.with_suffix(".dbf"),
+            candidate.with_suffix(".shx"),
+            candidate.with_suffix(".prj"),
+        ):
+            if component.is_file():
+                stat = component.stat()
+                perimeter_source_fingerprints.append({
+                    "path": str(component.resolve()),
+                    "size_bytes": stat.st_size,
+                    "mtime_ns": stat.st_mtime_ns,
+                })
+    treatment_stat = treatment_path.stat()
+    treatment_signature_payload = {
+        "task_name": project.config.get(
+            "treatment_task_name", "build_fire_wui_treatment_definitions_rolling5y_mixed_fires"
+        ),
+        "path_search_distance_miles": path_distance_miles,
+        "rolling_years": project.config.get("treatment_rolling_years", range(1, 11)),
+        "include_previous_calendar_year": bool(
+            project.config.get("treatment_include_previous_calendar_year", True)
+        ),
+        "lag_bands": project.config.get(
+            "treatment_lag_bands", (("lag_1_2y", 1, 2), ("lag_2_4y", 2, 4))
+        ),
+        "compute_angular_exposure": bool(project.config.get("treatment_compute_angular_exposure", True)),
+        "require_mixed_fire_paths": bool(project.config.get("treatment_require_mixed_fire_paths", True)),
+        "keep_only_classified_paths": bool(project.config.get("treatment_keep_only_classified_paths", True)),
+        "treatment_wui_buffer_miles": project.config.get("treatment_wui_buffer_miles", 1.5),
+        "fire_perimeter_threat_buffer_miles": project.config.get(
+            "fire_perimeter_threat_buffer_miles", 1.5
+        ),
+        "thickness_step_degrees": 0.25,
+        "eligible_facts": {
+            "path": str(treatment_path.resolve()),
+            "size_bytes": treatment_stat.st_size,
+            "mtime_ns": treatment_stat.st_mtime_ns,
+        },
+        "wui_singlepart_root": str(singlepart_root.resolve()),
+        "fire_wui_path_root": str(path_root.resolve()),
+        "mtbs_perimeter_sources": sorted(perimeter_source_fingerprints, key=lambda row: row["path"]),
+    }
+    treatment_config_signature = hashlib.sha256(
+        json.dumps(treatment_signature_payload, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
     output_dir = project.paths["fire_wui_treatment_dataset"]
     summary_path = project.paths["fire_wui_treatment_summary"]
     catalog_path = project.paths["treatment_definition_catalog"]
