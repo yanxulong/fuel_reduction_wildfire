@@ -72,33 +72,58 @@
   {\small Nov. 3, 2026}
 \end{frame}
 
-% NatCap Lab: introductory research slides (2026-11-02)
+% NatCap Lab: Stanford Dean's Lecture and natural-capital research framing
+% Put the three event images in project/output/slides/slides_figures/ on the Mac.
 \begin{frame}{My Research: Natural Capital}
-  \begin{columns}[c,onlytextwidth]
-    \begin{column}{0.47\textwidth}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.41\textwidth}
       \centering
-      % Image is stored outside the Git repository in the project output directory.
-      \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/SDSS.png}{%
-        \includegraphics[
-          width=\linewidth,
-          height=0.77\textheight,
-          keepaspectratio
-        ]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/SDSS.png}%
+      \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Stanford_Deans_Lecture.png}{%
+        \includegraphics[width=\linewidth,height=0.34\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Stanford_Deans_Lecture.png}%
       }{%
-        \fbox{\parbox[c][0.52\textheight][c]{0.91\linewidth}{%
-          \centering\small Figure not found:\\[0.3em] SDSS.png%
-        }}%
+        \fbox{\parbox[c][0.30\textheight][c]{0.90\linewidth}{\centering\small Stanford Doerr\\Dean's Lecture Series\\[0.4em]\scriptsize Image: Stanford_Deans_Lecture.png}}%
       }
+
+      \vspace{0.75em}
+      \begin{minipage}[t]{0.48\linewidth}
+        \centering
+        \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Partha_Dasgupta.png}{%
+          \includegraphics[width=\linewidth,height=0.26\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Partha_Dasgupta.png}%
+        }{%
+          \vspace{0.06\textheight}%
+        }
+        \par{\scriptsize\bfseries Partha Dasgupta}
+      \end{minipage}\hfill
+      \begin{minipage}[t]{0.48\linewidth}
+        \centering
+        \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Gretchen_Daily.jpg}{%
+          \includegraphics[width=\linewidth,height=0.26\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Gretchen_Daily.jpg}%
+        }{%
+          \vspace{0.06\textheight}%
+        }
+        \par{\scriptsize\bfseries Gretchen C. Daily}
+      \end{minipage}
+      \par\vspace{0.3em}
+      {\tiny Source: Stanford Doerr School of Sustainability}
     \end{column}
-    \begin{column}{0.49\textwidth}
-      \raggedright
-      {\small \href{https://www.econ.cam.ac.uk/people/academic/partha-dasgupta}{\textcolor{black}{\textbf{Professor Sir Partha Dasgupta}}}}\par
-      \vspace{1.0em}
-      {\Large\bfseries\color{black} On Natural Capital:}\par
-      \vspace{0.6em}
-      {\large\bfseries\color{black} The Value of the World Around Us}\par
-      \vspace{0.6em}
-      {\normalsize\bfseries\color{black} Transforming Economics to Value Nature and Combat Climate Change}\par
+    \begin{column}{0.55\textwidth}
+      \raggedright\color{black}
+      {\normalsize\bfseries A Dean's Lecture}\par
+      {\scriptsize featuring}\par
+      \vspace{0.25em}
+      {\normalsize\bfseries \href{https://www.econ.cam.ac.uk/people/academic/partha-dasgupta}{\textcolor{black}{Professor Partha Dasgupta}}}\par
+      \vspace{0.5em}
+      {\scriptsize Moderated by}\par
+      {\normalsize\bfseries Gretchen Daily}\par
+      \vspace{0.8em}
+      {\large\bfseries Ecology: The Missing Piece of Economics}\par
+      \vspace{0.8em}
+      {\small\bfseries On Natural Capital:}\par
+      {\small\bfseries The Value of the World Around Us}\par
+      \vspace{0.25em}
+      {\scriptsize\bfseries Transforming Economics to Value Nature and Combat Climate Change}\par
+      \vspace{0.65em}
+      {\tiny \href{https://web.cvent.com/event/33790715-d742-48ab-bdfb-d3b849efef90/summary}{Stanford Doerr School of Sustainability -- Dean's Lecture}}
     \end{column}
   \end{columns}
 \end{frame}
