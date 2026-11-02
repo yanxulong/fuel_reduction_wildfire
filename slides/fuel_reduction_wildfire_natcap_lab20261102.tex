@@ -76,57 +76,66 @@
 
 % NatCap Lab: self-introduction; 2-by-2 hometown grid and 2-by-1 PhD photo row.
 \begin{frame}{A Little Bit About Myself}
-  \vspace{0.4em}
+  \vspace{-0.1em}
   \begin{columns}[T,onlytextwidth]
     \begin{column}{0.48\textwidth}
-      \begin{itemize}
-        \item \textbf{Hometown:} Yellow River Delta, China.
-      \end{itemize}
-      \vspace{0.2em}
-      \centering
-      \begin{tabular}{@{}c@{\hspace{0.012\linewidth}}c@{}}
-      \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/yrd_satellite_square.jpg}{%
-    \includegraphics[width=0.44\linewidth,height=0.44\linewidth,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/yrd_satellite_square.jpg}%
-  }{%
-    \fbox{\parbox[c][0.208\textwidth][c]{0.208\textwidth}{\centering\tiny Photo not found}}%
-  }
-      &
-      \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/yrd_boat_square.jpg}{%
-    \includegraphics[width=0.44\linewidth,height=0.44\linewidth,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/yrd_boat_square.jpg}%
-  }{%
-    \fbox{\parbox[c][0.208\textwidth][c]{0.208\textwidth}{\centering\tiny Photo not found}}%
-  }
-      \\[0.2em]
-      \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/yrd_cranes_square.jpg}{%
-    \includegraphics[width=0.44\linewidth,height=0.44\linewidth,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/yrd_cranes_square.jpg}%
-  }{%
-    \fbox{\parbox[c][0.208\textwidth][c]{0.208\textwidth}{\centering\tiny Photo not found}}%
-  }
-      &
-      \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/yrd_sunset_square.png}{%
-    \includegraphics[width=0.44\linewidth,height=0.44\linewidth,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/yrd_sunset_square.png}%
-  }{%
-    \fbox{\parbox[c][0.208\textwidth][c]{0.208\textwidth}{\centering\tiny Photo not found}}%
-  }
-    \end{tabular}
+      % Both fixed-height panels share the same baseline.
+      \begin{minipage}[t][0.82\textheight][t]{\linewidth}
+        \begin{itemize}
+          \item \textbf{Hometown:} Yellow River Delta, China.
+        \end{itemize}
+        \vfill
+        {\centering
+          \begin{tabular}{@{}c@{\hspace{0.01\linewidth}}c@{}}
+            \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/yrd_satellite_square.jpg}{%
+        \includegraphics[width=0.44\linewidth,height=0.44\linewidth,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/yrd_satellite_square.jpg}%
+      }{%
+        \fbox{\parbox[c][0.44\linewidth][c]{0.44\linewidth}{\centering\tiny Photo not found}}%
+      }
+            &
+            \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/yrd_boat_square.jpg}{%
+        \includegraphics[width=0.44\linewidth,height=0.44\linewidth,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/yrd_boat_square.jpg}%
+      }{%
+        \fbox{\parbox[c][0.44\linewidth][c]{0.44\linewidth}{\centering\tiny Photo not found}}%
+      } \\[0.15em]
+            \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/yrd_cranes_square.jpg}{%
+        \includegraphics[width=0.44\linewidth,height=0.44\linewidth,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/yrd_cranes_square.jpg}%
+      }{%
+        \fbox{\parbox[c][0.44\linewidth][c]{0.44\linewidth}{\centering\tiny Photo not found}}%
+      }
+            &
+            \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/yrd_sunset_square.png}{%
+        \includegraphics[width=0.44\linewidth,height=0.44\linewidth,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/yrd_sunset_square.png}%
+      }{%
+        \fbox{\parbox[c][0.44\linewidth][c]{0.44\linewidth}{\centering\tiny Photo not found}}%
+      }
+          \end{tabular}\par
+        }
+      \end{minipage}
     \end{column}
     \begin{column}{0.48\textwidth}
-      \begin{itemize}
-        \item \textbf{Ph.D.:} Applied Economics, University of Minnesota (2025). Advisor: Steve Polasky.
-      \end{itemize}
-      \vspace{0.6em}
-      \centering
-      \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/dissertation-defense.jpeg}{%
-        \includegraphics[width=0.98\linewidth,height=0.34\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/dissertation-defense.jpeg}%
+      \begin{minipage}[t][0.82\textheight][t]{\linewidth}
+        \begin{itemize}
+          \item \textbf{Ph.D.:} Applied Economics, University of\newline
+          Minnesota (2025). Advisors: Steve\newline
+          Polasky and Marc Bellemare.
+        \end{itemize}
+        \vfill
+        {\centering
+          \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/dissertation-defense.jpeg}{%
+        \includegraphics[width=0.98\linewidth,height=0.325\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/dissertation-defense.jpeg}%
       }{%
-        \fbox{\parbox[c][0.30\textheight][c]{0.91\linewidth}{\centering\scriptsize Defense missing}}%
+        \fbox{\parbox[c][0.325\textheight][c]{0.98\linewidth}{\centering\tiny Defense not found}}%
       }
-      \par\vspace{0.2em}
-      \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/commencement-2025.jpeg}{%
-        \includegraphics[width=0.98\linewidth,height=0.34\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/commencement-2025.jpeg}%
+          \par\vspace{0.15em}
+          \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/commencement-2025.jpeg}{%
+        \includegraphics[width=0.98\linewidth,height=0.325\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/commencement-2025.jpeg}%
       }{%
-        \fbox{\parbox[c][0.30\textheight][c]{0.91\linewidth}{\centering\scriptsize Commencement missing}}%
+        \fbox{\parbox[c][0.325\textheight][c]{0.98\linewidth}{\centering\tiny Commencement not found}}%
       }
+          \par\vspace{0.4em}
+        }
+      \end{minipage}
     \end{column}
   \end{columns}
 \end{frame}
@@ -134,36 +143,37 @@
 % NatCap Lab: event logo above the combined speaker graphic in the left column.
 % Images: project/output/slides/slides_figures/Stanford_Deans_Lecture.png and people.png
 \begin{frame}{A Little Bit About My Research}
-  \centering
-  % Speaker graphic on top; lecture image and book cover underneath.
-  \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/people.png}{%
-    \includegraphics[width=0.79\textwidth,height=0.30\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/people.png}%
-  }{%
-    \fbox{\parbox[c][0.30\textheight][c]{0.79\textwidth}{\centering\tiny Speaker graphic not found}}%
-  }
-  \par\vspace{0.6em}
+  % Left-aligned research montage: speakers above lecture image and book cover.
   \begin{columns}[T,onlytextwidth]
-    \begin{column}{0.49\textwidth}
+    \begin{column}{0.78\textwidth}
       \centering
-      \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Stanford_Deans_Lecture.png}{%
-    \includegraphics[width=0.85\linewidth,height=0.28\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Stanford_Deans_Lecture.png}%
-  }{%
-    \fbox{\parbox[c][0.28\textheight][c]{0.85\linewidth}{\centering\tiny Dean's Lecture not found}}%
-  }
-      \par\vspace{0.35em}
-      {\scriptsize\bfseries A Dean's Lecture: Ecology: The Missing Piece of Economics}\par
-      {\tiny Featuring Professor Partha Dasgupta; moderated by Gretchen Daily}\par
+      \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/people.png}{%
+        \includegraphics[width=0.80\linewidth,height=0.28\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/people.png}%
+      }{%
+        \fbox{\parbox[c][0.28\textheight][c]{0.80\linewidth}{\centering\tiny Speaker graphic not found}}%
+      }
+      \par\vspace{0.5em}
+      \begin{minipage}[b]{0.49\linewidth}
+        \centering
+        \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Stanford_Deans_Lecture.png}{%
+        \includegraphics[width=0.97\linewidth,height=0.27\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Stanford_Deans_Lecture.png}%
+      }{%
+        \fbox{\parbox[c][0.27\textheight][c]{0.97\linewidth}{\centering\tiny Dean's Lecture not found}}%
+      }
+      \end{minipage}\hfill
+      \begin{minipage}[b]{0.45\linewidth}
+        \centering
+        \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/book_cover.jpg}{%
+        \includegraphics[width=0.94\linewidth,height=0.27\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/book_cover.jpg}%
+      }{%
+        \fbox{\parbox[c][0.27\textheight][c]{0.94\linewidth}{\centering\tiny Book cover not found}}%
+      }
+      \end{minipage}
+      \par\vspace{0.7em}
+      {\small\color{black} On Natural Capital: The Value of the World Around Us}\par
+      {\scriptsize\color{black} Transforming Economics to Value Nature and Combat Climate Change}\par
     \end{column}
-    \begin{column}{0.49\textwidth}
-      \centering
-      \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/book_cover.jpg}{%
-    \includegraphics[width=0.79\linewidth,height=0.35\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/book_cover.jpg}%
-  }{%
-    \fbox{\parbox[c][0.35\textheight][c]{0.79\linewidth}{\centering\tiny Book cover not found}}%
-  }
-      \par\vspace{0.35em}
-      {\scriptsize\bfseries On Natural Capital: The Value of the World Around Us}\par
-      {\tiny\bfseries Transforming Economics to Value Nature and Combat Climate Change}\par
+    \begin{column}{0.20\textwidth}
     \end{column}
   \end{columns}
 \end{frame}
