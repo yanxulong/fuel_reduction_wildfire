@@ -72,43 +72,35 @@
   {\small Nov. 3, 2026}
 \end{frame}
 
-% NatCap Lab: Lecture-inspired layout with two speaker portraits
-% Local images: project/output/slides/slides_figures/Dasgupta.png and gretchen.png
+% NatCap Lab: event logo above the combined speaker graphic in the left column.
+% Images: project/output/slides/slides_figures/Stanford_Deans_Lecture.png and people.png
 \begin{frame}{My Research: Natural Capital}
   \begin{columns}[T,onlytextwidth]
     \begin{column}{0.49\textwidth}
       \centering
-      % Preserve the event masthead where available.
       \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Stanford_Deans_Lecture.png}{%
-        \includegraphics[width=0.92\linewidth,height=0.23\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Stanford_Deans_Lecture.png}%
+        \includegraphics[
+          width=0.72\linewidth,
+          height=0.32\textheight,
+          keepaspectratio
+        ]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Stanford_Deans_Lecture.png}%
       }{%
-        {\small\bfseries Stanford Doerr School of Sustainability}\\[0.2em]
-        {\scriptsize Dean's Lecture Series}%
+        {\small\bfseries Stanford Doerr}\\[0.15em]
+        {\small\bfseries Dean's Lecture Series}%
       }
       \par\vspace{0.9em}
-      % Equal-width speaker cards, following the event page.
-      \begin{minipage}[t]{0.485\linewidth}
-        \centering
-        \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Dasgupta.png}{%
-          \includegraphics[width=\linewidth,height=0.34\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Dasgupta.png}%
-        }{%
-          \fbox{\parbox[c][0.29\textheight][c]{0.83\linewidth}{\centering\scriptsize Dasgupta.png\\not found}}%
-        }
-        \par\vspace{0.45em}
-        {\small\bfseries Partha Dasgupta}\par
-        {\tiny Professor Emeritus of Economics}
-      \end{minipage}\hfill
-      \begin{minipage}[t]{0.485\linewidth}
-        \centering
-        \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/gretchen.png}{%
-          \includegraphics[width=\linewidth,height=0.34\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/gretchen.png}%
-        }{%
-          \fbox{\parbox[c][0.29\textheight][c]{0.83\linewidth}{\centering\scriptsize gretchen.png\\not found}}%
-        }
-        \par\vspace{0.45em}
-        {\small\bfseries Gretchen C. Daily}\par
-        {\tiny Faculty Director, Natural Capital Alliance}
-      \end{minipage}
+      \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/people.png}{%
+        \includegraphics[
+          width=\linewidth,
+          height=0.49\textheight,
+          keepaspectratio
+        ]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/people.png}%
+      }{%
+        \fbox{\parbox[c][0.34\textheight][c]{0.91\linewidth}{%
+          \centering\small Speaker graphic not found\\[0.4em]
+          \scriptsize\texttt{people.png}%
+        }}%
+      }
     \end{column}
     \begin{column}{0.47\textwidth}
       \raggedright\color{black}
