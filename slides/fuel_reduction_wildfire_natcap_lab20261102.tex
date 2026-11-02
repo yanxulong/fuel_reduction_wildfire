@@ -72,52 +72,56 @@
   {\small Nov. 3, 2026}
 \end{frame}
 
-% NatCap Lab: Stanford Dean's Lecture and natural-capital research framing
-% Put the three event images in project/output/slides/slides_figures/ on the Mac.
+% NatCap Lab: Lecture-inspired layout with two speaker portraits
+% Local images: project/output/slides/slides_figures/Dasgupta.png and gretchen.png
 \begin{frame}{My Research: Natural Capital}
   \begin{columns}[T,onlytextwidth]
-    \begin{column}{0.41\textwidth}
+    \begin{column}{0.49\textwidth}
       \centering
+      % Preserve the event masthead where available.
       \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Stanford_Deans_Lecture.png}{%
-        \includegraphics[width=\linewidth,height=0.34\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Stanford_Deans_Lecture.png}%
+        \includegraphics[width=0.92\linewidth,height=0.23\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Stanford_Deans_Lecture.png}%
       }{%
-        \fbox{\parbox[c][0.30\textheight][c]{0.90\linewidth}{\centering\small Stanford Doerr\\Dean's Lecture Series\\[0.4em]\scriptsize Image: \texttt{\detokenize{Stanford_Deans_Lecture.png}}}}%
+        {\small\bfseries Stanford Doerr School of Sustainability}\\[0.2em]
+        {\scriptsize Dean's Lecture Series}%
       }
-
-      \vspace{0.75em}
-      \begin{minipage}[t]{0.48\linewidth}
+      \par\vspace{0.9em}
+      % Equal-width speaker cards, following the event page.
+      \begin{minipage}[t]{0.485\linewidth}
         \centering
-        \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Partha_Dasgupta.png}{%
-          \includegraphics[width=\linewidth,height=0.26\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Partha_Dasgupta.png}%
+        \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Dasgupta.png}{%
+          \includegraphics[width=\linewidth,height=0.34\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Dasgupta.png}%
         }{%
-          \vspace{0.06\textheight}%
+          \fbox{\parbox[c][0.29\textheight][c]{0.83\linewidth}{\centering\scriptsize Dasgupta.png\\not found}}%
         }
-        \par{\scriptsize\bfseries Partha Dasgupta}
+        \par\vspace{0.45em}
+        {\small\bfseries Partha Dasgupta}\par
+        {\tiny Professor Emeritus of Economics}
       \end{minipage}\hfill
-      \begin{minipage}[t]{0.48\linewidth}
+      \begin{minipage}[t]{0.485\linewidth}
         \centering
-        \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Gretchen_Daily.jpg}{%
-          \includegraphics[width=\linewidth,height=0.26\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/Gretchen_Daily.jpg}%
+        \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/gretchen.png}{%
+          \includegraphics[width=\linewidth,height=0.34\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/gretchen.png}%
         }{%
-          \vspace{0.06\textheight}%
+          \fbox{\parbox[c][0.29\textheight][c]{0.83\linewidth}{\centering\scriptsize gretchen.png\\not found}}%
         }
-        \par{\scriptsize\bfseries Gretchen C. Daily}
+        \par\vspace{0.45em}
+        {\small\bfseries Gretchen C. Daily}\par
+        {\tiny Faculty Director, Natural Capital Alliance}
       \end{minipage}
-      \par\vspace{0.3em}
-      {\tiny Source: Stanford Doerr School of Sustainability}
     \end{column}
-    \begin{column}{0.55\textwidth}
+    \begin{column}{0.47\textwidth}
       \raggedright\color{black}
-      {\normalsize\bfseries A Dean's Lecture}\par
+      {\small\bfseries A Dean's Lecture}\par
       {\scriptsize featuring}\par
-      \vspace{0.25em}
+      \vspace{0.15em}
       {\normalsize\bfseries \href{https://www.econ.cam.ac.uk/people/academic/partha-dasgupta}{\textcolor{black}{Professor Partha Dasgupta}}}\par
-      \vspace{0.5em}
+      \vspace{0.45em}
       {\scriptsize Moderated by}\par
       {\normalsize\bfseries Gretchen Daily}\par
-      \vspace{0.8em}
-      {\large\bfseries Ecology: The Missing Piece of Economics}\par
-      \vspace{0.8em}
+      \vspace{0.65em}
+      {\normalsize\bfseries Ecology: The Missing Piece of Economics}\par
+      \vspace{0.65em}
       {\small\bfseries On Natural Capital:}\par
       {\small\bfseries The Value of the World Around Us}\par
       \vspace{0.25em}
