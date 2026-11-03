@@ -479,6 +479,24 @@
    \vspace{-0.5em}
    \begin{figure}
     \centering
+    \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/hoover.png}{%
+       \includegraphics[width=1\textwidth,height=0.8\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/hoover.png}%
+     }{%
+       \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/figures/hoover.png}{%
+         \includegraphics[width=1\textwidth,height=0.8\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/figures/hoover.png}%
+       }{%
+         \fbox{\parbox[c][0.7\textheight][c]{0.85\textwidth}{\centering\small hoover.png not found in slides\_figures or figures}}%
+       }%
+     }
+  \end{figure}
+  \vspace{0em}
+\end{frame}
+
+\begin{frame}{Empirical Strategy}
+\textbf{Treatment:} completed fuel-reduction work before the fire up to 1.5 miles on the WUI-facing ignition-to-WUI path, within the fire-perimeter threat buffer (Baseline: 1.5 miles \(\approx\) 2.4 km). \\
+   \vspace{-0.5em}
+   \begin{figure}
+    \centering
     \includegraphics[width=1\textwidth,height=0.8\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/figures/nearestpoint_mechanism_conceptual_diagram_outcome_cases.png}
   \end{figure}
   \vspace{0em}
