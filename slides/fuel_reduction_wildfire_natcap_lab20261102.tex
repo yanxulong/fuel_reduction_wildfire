@@ -147,31 +147,8 @@
 \begin{frame}{A Little Bit About My Research}
   \begin{columns}[T,onlytextwidth]
     \begin{column}{0.65\textwidth}
-      \centering
-      \vspace{0.9em}
-      \begin{tikzpicture}[>=stealth]
-        \node[
-          draw=none, fill=cyan!6, rounded corners=4pt,
-          minimum width=1.66cm, minimum height=1.25cm,
-          align=center, inner sep=2pt
-        ] (earth) at (0,0)
-          {{\small\bfseries Earth}\\[-0.15em]{\tiny Climate}};
-        \node[
-          draw=none, fill=darkgreen, text=white, rounded corners=4pt,
-          minimum width=1.75cm, minimum height=1.25cm,
-          align=center, inner sep=2pt
-        ] (forest) at (2.12,0)
-          {{\small\bfseries Forests}\\[-0.15em]{\tiny Natural capital}};
-        \node[
-          draw=none, fill=yellow!22, rounded corners=4pt,
-          minimum width=1.66cm, minimum height=1.25cm,
-          align=center, inner sep=2pt
-        ] (economy) at (4.24,0)
-          {{\small\bfseries Economy}\\[-0.15em]{\tiny Human well-being}};
-        \draw[<->,thick,darkgreen] (earth.east) -- (forest.west);
-        \draw[<->,thick,darkgreen] (forest.east) -- (economy.west);
-      \end{tikzpicture}
-      \par\vspace{0.8em}
+      \raggedright
+      \vspace{0.4em}
       \begin{minipage}{0.97\linewidth}
         \raggedright
         \begin{itemize}
@@ -193,6 +170,32 @@
         \includegraphics[width=0.91\linewidth,height=0.30\textheight,keepaspectratio]{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/NCT's Proprietary Logo With Globe.png}%
       }{%
         \fbox{\parbox[c][0.24\textheight][c]{0.88\linewidth}{\centering\small NatCap TEEMs logo not found}}%
+      }
+      \par\vspace{0.7em}
+      % The framework is centered in the narrower right column and retains its proportions.
+      \resizebox{0.96\linewidth}{!}{%
+      \begin{tikzpicture}[>=stealth]
+        \node[
+          draw=none, fill=cyan!37, rounded corners=4pt,
+          minimum width=1.66cm, minimum height=1.25cm,
+          align=center, inner sep=2pt
+        ] (earth) at (0,0)
+          {{\small\bfseries Earth}\\[-0.15em]{\tiny Climate}};
+        \node[
+          draw=none, fill=darkgreen, text=white, rounded corners=4pt,
+          minimum width=1.75cm, minimum height=1.25cm,
+          align=center, inner sep=2pt
+        ] (forest) at (2.12,0)
+          {{\small\bfseries Forests}\\[-0.15em]{\tiny Natural capital}};
+        \node[
+          draw=none, fill=yellow!45, rounded corners=4pt,
+          minimum width=1.66cm, minimum height=1.25cm,
+          align=center, inner sep=2pt
+        ] (economy) at (4.24,0)
+          {{\small\bfseries Economy}\\[-0.15em]{\tiny Human well-being}};
+        \draw[<->,thick,darkgreen] (earth.east) -- (forest.west);
+        \draw[<->,thick,darkgreen] (forest.east) -- (economy.west);
+      \end{tikzpicture}
       }
       \par\vspace{0.9em}
       {\raggedright\small\bfseries
