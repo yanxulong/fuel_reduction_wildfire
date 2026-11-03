@@ -146,8 +146,34 @@
 \begin{frame}{A Little Bit About My Research}
   \begin{columns}[T,onlytextwidth]
     \begin{column}{0.48\textwidth}
-      % Left column reserved for additional research content.
-    \end{column}
+      \centering
+      {\small\bfseries Forests at the Intersection of Earth and Economy}\par
+      \vspace{1.2em}
+      \begin{tikzpicture}[>=stealth]
+        \node[
+          draw=cyan!55!black, fill=cyan!6, rounded corners=4pt,
+          thick, minimum width=1.66cm, minimum height=1.25cm,
+          align=center, inner sep=2pt
+        ] (earth) at (0,0)
+          {{\small\bfseries Earth}\\[-0.15em]{\tiny Climate}};
+        \node[
+          draw=darkgreen, fill=forestlight, rounded corners=4pt,
+          very thick, minimum width=1.75cm, minimum height=1.25cm,
+          align=center, inner sep=2pt
+        ] (forest) at (2.12,0)
+          {{\small\bfseries Forests}\\[-0.15em]{\tiny Natural capital}};
+        \node[
+          draw=fireaccent, fill=orange!7, rounded corners=4pt,
+          thick, minimum width=1.66cm, minimum height=1.25cm,
+          align=center, inner sep=2pt
+        ] (economy) at (4.24,0)
+          {{\small\bfseries Economy}\\[-0.15em]{\tiny Human well-being}};
+        \draw[<->,thick,darkgreen] (earth.east) -- (forest.west);
+        \draw[<->,thick,darkgreen] (forest.east) -- (economy.west);
+      \end{tikzpicture}
+      \par\vspace{1.4em}
+      {\small\color{black} My research focuses on \textbf{forests}: their management, ecosystem services, and economic outcomes.}\par
+    \end{column>
     \begin{column}{0.48\textwidth}
       \centering
       \IfFileExists{/Users/long/Files/my_devstack/fuel_reduction_wildfire/project/output/slides/slides_figures/NCT's Proprietary Logo With Globe.png}{%
