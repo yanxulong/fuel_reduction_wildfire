@@ -2670,28 +2670,28 @@ def finalize_fire_wui_treatment_definitions(project):
     }
 
 
-def build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi(project):
-    """Run shared rolling-5y mixed-fire treatment task on 1.5-mile path sample."""
+def _run_1p5mi_treatment_task(project, task_function):
+    """Apply the same fixed 1.5-mile design to workers and finalizers."""
     return functions.run_treatment_definition_variant(
         project,
-        build_fire_wui_treatment_definitions_rolling5y_mixed_fires,
+        task_function,
         variant="1p5mi",
         distance_miles=1.5,
         task_name="build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi",
         finalizer_task_name="finalize_fire_wui_treatment_definitions_1p5mi",
+    )
+
+
+def build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi(project):
+    """Run rolling-5y mixed-fire treatment exposure for 1.5-mile paths."""
+    return _run_1p5mi_treatment_task(
+        project, build_fire_wui_treatment_definitions_rolling5y_mixed_fires
     )
 
 
 def finalize_fire_wui_treatment_definitions_1p5mi(project):
-    """Finalize rolling-5y mixed-fire treatment outputs isolated for 1.5-mile paths."""
-    return functions.run_treatment_definition_variant(
-        project,
-        finalize_fire_wui_treatment_definitions,
-        variant="1p5mi",
-        distance_miles=1.5,
-        task_name="build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi",
-        finalizer_task_name="finalize_fire_wui_treatment_definitions_1p5mi",
-    )
+    """Finalize the corresponding 1.5-mile treatment outputs."""
+    return _run_1p5mi_treatment_task(project, finalize_fire_wui_treatment_definitions)
 
 
 def landfire_controls(project):
