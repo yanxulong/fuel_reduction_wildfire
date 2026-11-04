@@ -569,6 +569,28 @@ def build_treatment_time_windows(
     return windows
 
 
+def _treatment_window_bounds(
+    window: Mapping[str, object], fire_anchor: object, fire_year: int
+) -> tuple[object, object]:
+    """Get temporal bounds shared by scalar and vectorized classifications."""
+    import pandas as pd
+
+    kind = str(window["kind"])
+    if kind == "previous_calendar_year":
+        return (
+            pd.Timestamp(year=fire_year - 1, month=1, day=1),
+            pd.Timestamp(year=fire_year, month=1, day=1),
+        )
+    if kind == "rolling":
+        return fire_anchor - pd.DateOffset(years=int(window["max_years"])), fire_anchor
+    if kind == "lag_band":
+        return (
+            fire_anchor - pd.DateOffset(years=int(window["max_years"])),
+            fire_anchor - pd.DateOffset(years=int(window["min_years"])),
+        )
+    raise ValueError(f"Unknown treatment window kind: {kind}")
+
+
 def treatment_window_membership(
     completion_date: object,
     completion_year: object,
@@ -587,17 +609,7 @@ def treatment_window_membership(
     if pd.notna(completion) and pd.notna(fire) and date_precision == "exact":
         if completion >= fire:
             return False
-        if kind == "previous_calendar_year":
-            start = pd.Timestamp(year=fire.year - 1, month=1, day=1)
-            end = pd.Timestamp(year=fire.year, month=1, day=1)
-        elif kind == "rolling":
-            start = fire - pd.DateOffset(years=int(window["max_years"]))
-            end = fire
-        elif kind == "lag_band":
-            start = fire - pd.DateOffset(years=int(window["max_years"]))
-            end = fire - pd.DateOffset(years=int(window["min_years"]))
-        else:
-            raise ValueError(f"Unknown treatment window kind: {kind}")
+        start, end = _treatment_window_bounds(window, fire, fire.year)
         # Rolling is [F-n years, F); lag age bands are [min, max), in elapsed age.
         if kind == "lag_band":
             return bool(start < completion <= end)
@@ -612,19 +624,8 @@ def treatment_window_membership(
         return None
     if not (1900 <= treatment_year <= 2100 and 1900 <= event_year <= 2100):
         return None
-    if kind == "previous_calendar_year":
-        start = pd.Timestamp(year=event_year - 1, month=1, day=1)
-        end = pd.Timestamp(year=event_year, month=1, day=1)
-    elif kind == "rolling":
-        fire_anchor = fire if pd.notna(fire) else pd.Timestamp(year=event_year, month=7, day=1)
-        start = fire_anchor - pd.DateOffset(years=int(window["max_years"]))
-        end = fire_anchor
-    elif kind == "lag_band":
-        fire_anchor = fire if pd.notna(fire) else pd.Timestamp(year=event_year, month=7, day=1)
-        start = fire_anchor - pd.DateOffset(years=int(window["max_years"]))
-        end = fire_anchor - pd.DateOffset(years=int(window["min_years"]))
-    else:
-        raise ValueError(f"Unknown treatment window kind: {kind}")
+    fire_anchor = fire if pd.notna(fire) else pd.Timestamp(year=event_year, month=7, day=1)
+    start, end = _treatment_window_bounds(window, fire_anchor, event_year)
 
     if date_precision == "calendar_year":
         year_start = pd.Timestamp(year=treatment_year, month=1, day=1)
@@ -724,17 +725,7 @@ def treatment_window_membership_matrix(
     for window_idx, window in enumerate(windows):
         kind = str(window["kind"])
         if fire_valid:
-            if kind == "previous_calendar_year":
-                start = pd.Timestamp(year=fire.year - 1, month=1, day=1)
-                end = pd.Timestamp(year=fire.year, month=1, day=1)
-            elif kind == "rolling":
-                start = fire - pd.DateOffset(years=int(window["max_years"]))
-                end = fire
-            elif kind == "lag_band":
-                start = fire - pd.DateOffset(years=int(window["max_years"]))
-                end = fire - pd.DateOffset(years=int(window["min_years"]))
-            else:
-                raise ValueError(f"Unknown treatment window kind: {kind}")
+            start, end = _treatment_window_bounds(window, fire, fire.year)
             if kind == "lag_band":
                 exact_inside = (completion > start) & (completion <= end) & before_fire
             else:
@@ -745,17 +736,7 @@ def treatment_window_membership_matrix(
             continue
         if fire_anchor is None:
             continue
-        if kind == "previous_calendar_year":
-            start = pd.Timestamp(year=event_year - 1, month=1, day=1)
-            end = pd.Timestamp(year=event_year, month=1, day=1)
-        elif kind == "rolling":
-            start = fire_anchor - pd.DateOffset(years=int(window["max_years"]))
-            end = fire_anchor
-        elif kind == "lag_band":
-            start = fire_anchor - pd.DateOffset(years=int(window["max_years"]))
-            end = fire_anchor - pd.DateOffset(years=int(window["min_years"]))
-        else:
-            raise ValueError(f"Unknown treatment window kind: {kind}")
+        start, end = _treatment_window_bounds(window, fire_anchor, event_year)
 
         window_start = np.datetime64(start.to_datetime64(), "ns")
         window_end = np.datetime64(end.to_datetime64(), "ns")
