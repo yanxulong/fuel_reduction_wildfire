@@ -69,6 +69,39 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def validate_task_options(args: argparse.Namespace, enabled_tasks: list[str]) -> None:
+    """Reject inconsistent treatment-array options before creating any outputs."""
+    fixed_1p5mi_tasks = {
+        "build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi",
+        "finalize_fire_wui_treatment_definitions_1p5mi",
+    }
+    if (
+        any(task in fixed_1p5mi_tasks for task in enabled_tasks)
+        and args.distance_miles is not None
+        and abs(args.distance_miles - 1.5) > 1e-9
+    ):
+        raise SystemExit(
+            "Task build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi fixes distance at 1.5 miles."
+        )
+    array_options_given = any((args.array_worker_id is not None, args.array_worker_count is not None, args.array_run_id))
+    if array_options_given and not args.array_run_id:
+        raise SystemExit("--array-run-id is required with treatment array options.")
+    if args.array_worker_id is not None:
+        if args.array_worker_count is None or args.array_worker_count < 1:
+            raise SystemExit("--array-worker-count must be positive when --array-worker-id is supplied.")
+        if len(enabled_tasks) != 1 or enabled_tasks[0] not in TREATMENT_ARRAY_WORKER_TASKS:
+            choices = ", ".join(sorted(TREATMENT_ARRAY_WORKER_TASKS))
+            raise SystemExit(f"Array worker mode requires one treatment worker task: {choices}.")
+    elif array_options_given and (
+        len(enabled_tasks) != 1 or enabled_tasks[0] not in TREATMENT_ARRAY_FINALIZER_TASKS
+    ):
+        raise SystemExit("Array metadata without a worker ID requires one treatment finalizer task.")
+    if any(task in TREATMENT_ARRAY_FINALIZER_TASKS for task in enabled_tasks) and (
+        args.array_worker_count is None or not args.array_run_id
+    ):
+        raise SystemExit("Finalizer requires --array-worker-count and --array-run-id.")
+
+
 def main() -> int:
     args = parse_args()
     if args.list_tasks:
@@ -85,35 +118,7 @@ def main() -> int:
         config["overwrite_existing"] = True
     if args.distance_miles is not None:
         config["fire_wui_distance_miles"] = args.distance_miles
-    fixed_1p5mi_tasks = {
-        "build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi",
-        "finalize_fire_wui_treatment_definitions_1p5mi",
-    }
-    if (
-        any(task in fixed_1p5mi_tasks for task in config["enabled_tasks"])
-        and args.distance_miles is not None
-        and abs(args.distance_miles - 1.5) > 1e-9
-    ):
-        raise SystemExit(
-            "Task build_fire_wui_treatment_definitions_rolling5y_mixed_fires_1p5mi fixes distance at 1.5 miles."
-        )
-    array_options_given = any((args.array_worker_id is not None, args.array_worker_count is not None, args.array_run_id))
-    if array_options_given and not args.array_run_id:
-        raise SystemExit("--array-run-id is required with treatment array options.")
-    if args.array_worker_id is not None:
-        if args.array_worker_count is None or args.array_worker_count < 1:
-            raise SystemExit("--array-worker-count must be positive when --array-worker-id is supplied.")
-        if len(config["enabled_tasks"]) != 1 or config["enabled_tasks"][0] not in TREATMENT_ARRAY_WORKER_TASKS:
-            choices = ", ".join(sorted(TREATMENT_ARRAY_WORKER_TASKS))
-            raise SystemExit(f"Array worker mode requires one treatment worker task: {choices}.")
-    elif array_options_given and (
-        len(config["enabled_tasks"]) != 1 or config["enabled_tasks"][0] not in TREATMENT_ARRAY_FINALIZER_TASKS
-    ):
-        raise SystemExit("Array metadata without a worker ID requires one treatment finalizer task.")
-    if any(task in TREATMENT_ARRAY_FINALIZER_TASKS for task in config["enabled_tasks"]) and (
-        args.array_worker_count is None or not args.array_run_id
-    ):
-        raise SystemExit("Finalizer requires --array-worker-count and --array-run-id.")
+    validate_task_options(args, config["enabled_tasks"])
     if config.get("overwrite_existing", False):
         print("[policy] overwrite enabled; existing task outputs may be rebuilt.")
     else:
