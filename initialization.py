@@ -75,12 +75,8 @@ def initialize_paths(project: LocalProjectFlow, config: dict[str, object] | None
     ]
 
     def unique_paths(paths: list[Path]) -> tuple[Path, ...]:
-        unique: list[Path] = []
-        for path in paths:
-            resolved = Path(path).expanduser().resolve()
-            if resolved not in unique:
-                unique.append(resolved)
-        return tuple(unique)
+        """Resolve paths and remove duplicates without changing search priority."""
+        return tuple(dict.fromkeys(path.expanduser().resolve() for path in paths))
 
     # Inputs may live across Home, Scratch, and the active local checkout.
     data_roots = unique_paths([home_root, scratch_root, *extra_roots, checkout_root, project_root])
